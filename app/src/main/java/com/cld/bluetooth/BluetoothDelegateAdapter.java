@@ -110,6 +110,9 @@ public class BluetoothDelegateAdapter {
             return null;
     }
 
+    public boolean connectDevice(BluetoothDevice device){
+        return false;
+    }
     protected void destroy(){
         this.mContext.unregisterReceiver(this.deviceReceiver);
     }
@@ -122,10 +125,13 @@ public class BluetoothDelegateAdapter {
         BTEventListener listener;
         if(!mEventListeners.isEmpty()){
             while(iterator.hasNext()){
+                listener = (BTEventListener)iterator.next();
                 switch(what){
                     case MSG_DEVICE_FOUND:
-                        listener = (BTEventListener)iterator.next();
                         listener.onDeviceFound(device);
+                        break;
+                    case MSG_DISCOVERY_FINISHED:
+                        listener.onDiscoveryFinished();
                         break;
                     default:
                         break;
@@ -162,7 +168,6 @@ public class BluetoothDelegateAdapter {
                 BluetoothDelegateAdapter.this.onEventReceived(MSG_DEVICE_FOUND, dev, exceptionMessage);
 
             }
-
             if(action.compareTo(BluetoothDevice.ACTION_BOND_STATE_CHANGED) == 0){
 
             }
@@ -173,7 +178,7 @@ public class BluetoothDelegateAdapter {
 
             }
             if(action.compareTo(BluetoothAdapter.ACTION_DISCOVERY_FINISHED) == 0){
-
+                BluetoothDelegateAdapter.this.onEventReceived(MSG_DISCOVERY_FINISHED, null, null);
             }
 
         }

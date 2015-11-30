@@ -1,6 +1,7 @@
 package com.cld.bluetoothdemo;
 
 import android.bluetooth.BluetoothDevice;
+import android.content.Intent;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
@@ -47,6 +48,7 @@ public class MainActivity extends AppCompatActivity implements OnClickListener, 
         mDelegateAdapter.registerEventListeners(this);
         mAdapter = new ArrayAdapter(this, android.R.layout.simple_list_item_1, arrayAdapter);
         lvDevice.setAdapter(mAdapter);
+        lvDevice.setOnItemClickListener(this);
 
     }
 
@@ -60,10 +62,11 @@ public class MainActivity extends AppCompatActivity implements OnClickListener, 
                 mDelegateAdapter.setEnabled(false);
                 break;
             case R.id.bt_scan:
-                isDiscoveryFinished = false;
                 if(isDiscoveryFinished) {
                     mAdapter.clear();
+                    deviceList.clear();
                 }
+                isDiscoveryFinished = false;
                 mDelegateAdapter.startDiscovery();
                 break;
             case R.id.bt_stop:
@@ -75,10 +78,22 @@ public class MainActivity extends AppCompatActivity implements OnClickListener, 
         }
     }
 
+    @Override
+    public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
+        Log.i(TAG, "------");
+        Intent intent = new Intent(this, ComActivity.class);
+        intent.putExtra("DEVICE", deviceList.get(position));
+        this.startActivity(intent);
+    }
 
     @Override
     public void onDiscoveryFinished() {
         isDiscoveryFinished = true;
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
     }
 
     @Override
@@ -104,8 +119,4 @@ public class MainActivity extends AppCompatActivity implements OnClickListener, 
 
     }
 
-    @Override
-    public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
-
-    }
 }
