@@ -8,9 +8,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.Bundle;
 import android.util.Log;
-
 import java.util.ArrayList;
-import java.util.EventListener;
 import java.util.Iterator;
 
 /**
@@ -112,6 +110,9 @@ public class BluetoothDelegateAdapter {
 
     public boolean connectDevice(BluetoothDevice device){
         return false;
+    }
+    public void send(){
+
     }
     protected void destroy(){
         this.mContext.unregisterReceiver(this.deviceReceiver);
