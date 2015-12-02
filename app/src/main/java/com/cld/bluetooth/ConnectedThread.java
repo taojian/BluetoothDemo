@@ -2,6 +2,7 @@ package com.cld.bluetooth;
 
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothSocket;
+import android.os.Handler;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -12,17 +13,19 @@ import java.io.OutputStream;
  */
 public class ConnectedThread extends Thread{
 
-    private final BluetoothSocket mSocket;
-    private final BluetoothDevice mDevice;
+    private final BluetoothSocket mSocket;      //socket句柄
+    private final BluetoothDevice mDevice;      //主动连接设备
     private final InputStream mmInStream;
     private final OutputStream mmOutStream;
     private static final int MAX_LEN = 65536;
     private byte[] buffer;
     private boolean isSocketReset = false;
+    private Handler mHandler;
 
-    public ConnectedThread(BluetoothSocket socket, BluetoothDevice device){
+    public ConnectedThread(BluetoothSocket socket, BluetoothDevice device, Handler handler){
         this.mSocket = socket;
         this.mDevice = device;
+        this.mHandler = handler;
         InputStream tmpIn = null;
         OutputStream tmpOut = null;
         this.buffer = new byte[MAX_LEN];
@@ -53,6 +56,10 @@ public class ConnectedThread extends Thread{
     public void cancel(){
         this.isSocketReset = true;
         resetSocket(this.mSocket);
+    }
+
+    public BluetoothDevice getDevice(){
+        return this.mDevice;
     }
 
     @Override

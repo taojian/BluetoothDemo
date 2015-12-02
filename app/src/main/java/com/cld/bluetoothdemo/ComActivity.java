@@ -14,6 +14,7 @@ public class ComActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_com);
         Intent mainActivity = this.getIntent();
         BluetoothDevice device = mainActivity.getParcelableExtra("DEVICE");
         Log.i(TAG, "---tj----" + device.getName() + "-----" + device.getAddress());

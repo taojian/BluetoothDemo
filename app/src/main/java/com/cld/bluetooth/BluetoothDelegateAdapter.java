@@ -7,12 +7,17 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.Bundle;
+import android.os.Message;
 import android.util.Log;
+
+import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Iterator;
+import android.os.Handler;
 
 /**
  * 蓝牙适配器类
+ * 只能在主线程初始化！
  * Created by taojian on 2015/11/25.
  */
 public class BluetoothDelegateAdapter {
@@ -20,9 +25,11 @@ public class BluetoothDelegateAdapter {
     private static final  String TAG = "CLDLOGTAG";
     private BluetoothAdapter mAdapter = null;
     private BroadcastReceiver deviceReceiver = null;
+    private BluetoothConnManager connManager;
     private Context mContext = null;
     private ArrayList<BTEventListener> mEventListeners = new ArrayList<>();
     private boolean isEnabled = false;
+    private MyHandler mHandler;
     private static final int MSG_DEVICE_FOUND       = 1;
     private static final int MSG_STATE_CHANGED      = 2;
     private static final int MSG_DISCOVERY_FINISHED = 3;
@@ -31,6 +38,11 @@ public class BluetoothDelegateAdapter {
         this.mContext = context;
         this.mAdapter = BluetoothAdapter.getDefaultAdapter();
         this.deviceReceiver = new DeviceBroadcastReceiver();
+        this.mHandler = new MyHandler(this);
+        this.connManager = new BluetoothConnManager(context, this.mHandler);
+        if(this.isEnabled()){
+            connManager.start();
+        }
 
         IntentFilter filter = new IntentFilter();
         filter.addAction(BluetoothDevice.ACTION_FOUND);
@@ -109,11 +121,26 @@ public class BluetoothDelegateAdapter {
     }
 
     public boolean connectDevice(BluetoothDevice device){
-        return false;
+        boolean result = false;
+        if(this.isEnabled()){
+            this.connManager.connect(device);
+            result = true;
+        }
+        return result;
     }
-    public void send(){
 
+    public void disconnectDevice(BluetoothDevice device){
+        if(this.isEnabled()){
+            this.connManager.disconnect(device);
+        }
     }
+
+    public void send(BluetoothDevice device, byte[] buffer, int length){
+        if(this.isEnabled() && device != null){
+            this.connManager.write(device, buffer, length);
+        }
+    }
+
     protected void destroy(){
         this.mContext.unregisterReceiver(this.deviceReceiver);
     }
@@ -151,12 +178,31 @@ public class BluetoothDelegateAdapter {
         Log.i(TAG, "registerEventListeners listener"+listener.toString());
     }
 
+    private class MyHandler extends Handler{
+
+        private WeakReference<BluetoothDelegateAdapter> mAdapter;
+        MyHandler(BluetoothDelegateAdapter adapter){
+            this.mAdapter = new WeakReference(adapter);
+        }
+
+        @Override
+        public void handleMessage(Message msg) {
+            super.handleMessage(msg);
+
+            String message = null;
+            BluetoothDelegateAdapter adapter = this.mAdapter.get();
+            Bundle bundle = msg.getData();
+            adapter.onEventReceived(msg.what, (BluetoothDevice)msg.obj, bundle.getString("exception"));
+
+        }
+    }
+
     private class DeviceBroadcastReceiver extends  BroadcastReceiver{
 
         @Override
         public void onReceive(Context context, Intent intent) {
             String exceptionMessage = null;
-            BluetoothDevice dev = null;
+            BluetoothDevice dev;
             String action = intent.getAction();
             Bundle bundle = intent.getExtras();
             if(bundle != null){

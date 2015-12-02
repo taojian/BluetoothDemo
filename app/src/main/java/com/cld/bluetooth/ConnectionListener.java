@@ -19,7 +19,7 @@ final class ConnectionListener {
     private ConnectionListener.AcceptThread mThread;
 
 
-    public ConnectionListener(ConnectionListener.ConnectionReceiver receiver, BluetoothAdapter adapter) {
+    public ConnectionListener(ConnectionReceiver receiver, BluetoothAdapter adapter) {
         this.mReceiver = receiver;
         this.mAdapter = adapter;
     }
