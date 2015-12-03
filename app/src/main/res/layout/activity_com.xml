@@ -4,8 +4,8 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
 
-   >
-   <ScrollView
+    >
+    <ScrollView
        android:layout_width="match_parent"
        android:layout_height="300dp"
        android:id="@+id/scrollView"
@@ -22,8 +22,52 @@
            android:layout_marginTop="8dp"
            android:scrollbars="vertical"
            android:singleLine="false"/>
-   </ScrollView>
+    </ScrollView>
 
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:id="@+id/layout_ctrl"
+        android:orientation="horizontal"
+        android:layout_alignParentBottom="true">
 
+        <Button
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:id="@+id/btn_con"
+            android:text="@string/connect"/>
+        <Button
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:id="@+id/btn_discon"
+            android:text="@string/disconnect"/>
+        <Button
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:id="@+id/btn_send"
+            android:text="@string/send"/>
+        <Button
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:id="@+id/btn_clear"
+            android:text="@string/clear"/>
+    </LinearLayout>
 
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:layout_above="@id/layout_ctrl">
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/data"
+            android:textSize="18sp"/>
+        <EditText
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:id="@+id/et_data"
+            android:hint="填写数据"
+            android:singleLine="false"/>
+    </LinearLayout>
 </RelativeLayout>

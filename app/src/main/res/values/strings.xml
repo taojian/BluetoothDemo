@@ -5,4 +5,10 @@
     <string name="scan">扫描</string>
     <string name="stop">停止</string>
     <string name="title_activity_com">ComActivity</string>
+    <string name="connect">连接</string>
+    <string name="disconnect">断开</string>
+    <string name="send">发送</string>
+    <string name="clear">清屏</string>
+    <string name="connected">蓝牙已连接</string>
+    <string name="data">发送内容</string>
 </resources>

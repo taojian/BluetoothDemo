@@ -2,8 +2,13 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.cld.bluetoothdemo">
 
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.BLUETOOTH" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
+
+    <uses-premission android:name="android.permission.INTERACT_ACROSS_USERS_FULL" />
+
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <application
         android:allowBackup="true"
@@ -22,6 +27,11 @@
             android:name=".ComActivity"
             android:label="@string/title_activity_com"
             android:theme="@style/AppTheme.NoActionBar"></activity>
+
+        <service
+            android:name=".TestService"
+            android:enabled="true"
+            android:exported="false"></service>
     </application>
 
 </manifest>

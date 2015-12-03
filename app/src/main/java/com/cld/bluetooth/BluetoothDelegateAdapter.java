@@ -178,6 +178,12 @@ public class BluetoothDelegateAdapter {
         Log.i(TAG, "registerEventListeners listener"+listener.toString());
     }
 
+    public void unregisterEventListeners(BTEventListener listener){
+        if(listener != null && mEventListeners != null){
+            mEventListeners.remove(listener);
+        }
+    }
+
     private class MyHandler extends Handler{
 
         private WeakReference<BluetoothDelegateAdapter> mAdapter;

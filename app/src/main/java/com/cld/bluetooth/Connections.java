@@ -49,8 +49,13 @@ public class Connections {
         private ConnectedThread mThread;
         private ArrayList<ConnectedThread> connectedList;
 
+        ConnectionsList(){
+            this.connectedList = new ArrayList<>();
+        }
         public void clear(){
-            this.connectedList.clear();
+            if(this.connectedList != null){
+                this.connectedList.clear();
+            }
         }
 
         public void write(BluetoothDevice device, byte[] buffer, int length){
