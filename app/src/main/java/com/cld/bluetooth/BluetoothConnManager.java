@@ -34,6 +34,7 @@ public class BluetoothConnManager implements ConnectionReceiver {
             this.mListener = new ConnectionListener(this, mAdapter);
         }
         this.mListener.start();
+
         if(this.mConnectThread != null){
             this.mConnectThread.cancel();
             this.mConnectThread = null;
@@ -73,6 +74,12 @@ public class BluetoothConnManager implements ConnectionReceiver {
         this.mConnections.write(device, buffer, length);
     }
 
+    public void connectFailed(BluetoothDevice device, String msg){
+        synchronized(this){
+            this.mConnectThread = null;
+        }
+    }
+
     @Override
     public void onConnectionEstablished(BluetoothSocket socket) {
         BluetoothDevice device = socket.getRemoteDevice();
@@ -91,41 +98,97 @@ public class BluetoothConnManager implements ConnectionReceiver {
              *
              *
              */
-            BluetoothSocket tmp = null;
-            try{
-                tmp = this.mmDevice.createRfcommSocketToServiceRecord(SDPUUID);
-            } catch (IOException e) {
-                Log.e(TAG, "--tj--createRfcommSocketToServiceRecord--error--");
-                e.printStackTrace();
-            }
 
-            mmSocket = tmp;
         }
 
         @Override
         public void run() {
-            if(mAdapter != null)
+            if(mAdapter != null) {
                 mAdapter.cancelDiscovery();
-
-            try{
-                //阻塞连接，直到成功或者抛出异常
-                mmSocket.connect();
-            } catch (IOException e) {
-                e.printStackTrace();
             }
 
-            mConnections.connected(mmSocket, mmDevice);
+            boolean connectResult = connectRfcommSocket();
+            if(!connectResult){
+                try {
+                    sleep(500);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+
+                if(this.mmSocket != null){
+                    try {
+                        this.mmSocket.close();
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                }
+
+                BluetoothConnManager.this.connectFailed(this.mmDevice, null);
+                synchronized(BluetoothConnManager.this){
+                    BluetoothConnManager.this.mConnectThread = null;
+                }
+                return;
+            }
+
+            BluetoothConnManager.this.mConnections.connected(mmSocket, mmDevice);
+        }
+
+
+        private boolean connectRfcommSocket(){
+            boolean result = false;
+            int retryCount = 2;
+
+            try{
+                if(this.mmDevice != null) {
+                    this.mmSocket = this.mmDevice.createRfcommSocketToServiceRecord(SDPUUID);
+                }else{
+                    Log.e(TAG, "--tj---connect device is null-------");
+                }
+            } catch (IOException e) {
+                Log.e(TAG, "--tj--createRfcommSocketToServiceRecord--error--");
+                e.printStackTrace();
+
+            }
+
+            while(true){
+                try{
+                    if(this.mmSocket != null){
+                        this.mmSocket.connect();
+                        result = true;
+                        Log.i(TAG, "--tj---connect socket success!-----------");
+                    }else {
+                        Log.e(TAG, "--tj--connect socket is null-------");
+                    }
+                }catch(IOException e){
+                    Log.i(TAG, "---tj----connect socket exception---" + e.getMessage());
+                    if(retryCount > 0){
+                        --retryCount;
+                        try {
+                            sleep(500);
+                        } catch (InterruptedException e1) {
+                            e1.printStackTrace();
+                        }
+                        continue;
+                    }
+                    break;
+                }
+
+                break;
+            }
+
+            return result;
         }
 
         public void cancel(){
             try{
                 if(mmSocket != null){
                     mmSocket.close();
+                    mmSocket = null;
                 }
             }catch (IOException e) {
                 e.printStackTrace();
             }
-            Log.i(TAG, "---tj---connectTthread cancel----socket close---");
+            Log.i(TAG, "---tj---connectThread cancel----socket close---");
         }
 
     }

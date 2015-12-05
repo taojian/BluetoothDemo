@@ -10,6 +10,7 @@ import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.view.View.OnClickListener;
+import android.widget.EditText;
 
 import com.cld.bluetooth.BluetoothDelegateAdapter;
 
@@ -23,6 +24,7 @@ public class ComActivity extends Activity implements OnClickListener{
     private Button btnDiscon;
     private Button btnSend;
     private Button btnClear;
+    private EditText editData;
 
 
     @Override
@@ -44,6 +46,7 @@ public class ComActivity extends Activity implements OnClickListener{
         btnSend.setOnClickListener(this);
         btnClear = (Button)this.findViewById(R.id.btn_clear);
         btnClear.setOnClickListener(this);
+        editData = (EditText)this.findViewById(R.id.et_data);
 
     }
 
@@ -54,8 +57,12 @@ public class ComActivity extends Activity implements OnClickListener{
                 mAdapter.connectDevice(this.device);
                 break;
             case R.id.btn_discon:
+                mAdapter.disconnectDevice(this.device);
                 break;
             case R.id.btn_send:
+                String data = editData.getText().toString().trim();
+                byte[] buffer = data.getBytes();
+                mAdapter.send(device, buffer, buffer.length);
                 break;
             case R.id.btn_clear:
                 break;

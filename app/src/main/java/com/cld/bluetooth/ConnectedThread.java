@@ -2,8 +2,13 @@ package com.cld.bluetooth;
 
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothSocket;
+import android.os.Bundle;
 import android.os.Handler;
+import android.os.Message;
+import android.util.Log;
 
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -13,6 +18,7 @@ import java.io.OutputStream;
  */
 public class ConnectedThread extends Thread{
 
+    private final String TAG = "CLDLOGTAG";
     private final BluetoothSocket mSocket;      //socket句柄
     private final BluetoothDevice mDevice;      //主动连接设备
     private final InputStream mmInStream;
@@ -23,6 +29,7 @@ public class ConnectedThread extends Thread{
     private Handler mHandler;
 
     public ConnectedThread(BluetoothSocket socket, BluetoothDevice device, Handler handler){
+
         this.mSocket = socket;
         this.mDevice = device;
         this.mHandler = handler;
@@ -37,6 +44,8 @@ public class ConnectedThread extends Thread{
 
         }
 
+//        this.mmInStream = new BufferedInputStream(tmpIn);
+//        this.mmOutStream = new BufferedOutputStream(tmpOut);
         this.mmInStream = tmpIn;
         this.mmOutStream = tmpOut;
         this.isSocketReset = false;
@@ -48,8 +57,14 @@ public class ConnectedThread extends Thread{
             System.arraycopy(buf, 0, this.buffer, 0, num);
             this.mmOutStream.write(this.buffer, 0, length);
             this.mmOutStream.flush();
+            Log.i(TAG, "---tj---send data----"+new String(this.buffer));
         }catch(IOException e){
-            e.printStackTrace();
+            Message msg = this.mHandler.obtainMessage(BluetoothDelegateAdapter.MSG_WRITE_FAILED);
+            msg.obj = this.mDevice;
+            Bundle bundle = new Bundle();
+            bundle.putString("exception", e.getMessage());
+            msg.setData(bundle);
+            this.mHandler.sendMessage(msg);
         }
     }
 
@@ -67,18 +82,29 @@ public class ConnectedThread extends Thread{
         byte[] buffer = new byte[1024];
         while(true){
             try{
-                int bytes = this.mmInStream.read(buffer);
+                Log.i(TAG, "----tj------mmInStream.read-----");
+                int bytes = this.mmInStream.read(buffer);       //间隔时间read，并没有阻塞挂起
 
             }catch(IOException e){
+                Log.i(TAG, "--tj-----IOException-----"+e.getMessage());
                 this.connectionLost(e.getMessage());
+                return;
             }
         }
     }
 
-    private void connectionLost(String exception){
-        if(!this.isSocketReset){
+    private void connectionLost(String exceptionMsg) {
+        Log.i(TAG, "----tj-----Connect lost-------");
+        if(!this.isSocketReset) {
             resetSocket(this.mSocket);
         }
+
+        Message msg = this.mHandler.obtainMessage(BluetoothDelegateAdapter.MSG_DISCONNECTED);
+        msg.obj = this.mDevice;
+        Bundle bundle = new Bundle();
+        bundle.putString("exception", exceptionMsg);
+        msg.setData(bundle);
+        this.mHandler.sendMessage(msg);
     }
 
     private void resetSocket(BluetoothSocket socket){

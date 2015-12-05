@@ -3,6 +3,9 @@ package com.cld.bluetooth;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothSocket;
 import android.os.Handler;
+import android.os.Message;
+import android.util.Log;
+import com.cld.bluetooth.BluetoothDelegateAdapter;
 
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -13,8 +16,10 @@ import java.util.Iterator;
  */
 public class Connections {
 
+    private String TAG = "CLDLOGTAG";
     private ConnectionsList mList;
     private Handler mHandler;
+
 
     public Connections(Handler handler){
         this.mList = new ConnectionsList();
@@ -23,15 +28,24 @@ public class Connections {
     }
 
     public void connected(BluetoothSocket socket, BluetoothDevice device){
+        Log.i(TAG, "-----tj------new  ConnectedThread----");
         ConnectedThread conn = new ConnectedThread(socket, device, this.mHandler);
         conn.start();
         if(this.mList != null){
             this.mList.addConnection(conn);
         }
+        Message msg = mHandler.obtainMessage(BluetoothDelegateAdapter.MSG_CONNECTED);
+        msg.obj = device;
+        mHandler.sendMessage(msg);
     }
 
+
     public void disconnect(BluetoothDevice device){
+        if(device == null){
+            return;
+        }
         ConnectedThread mThread = this.mList.findConnection(device);
+        this.mList.removeConnection(device);
         if(mThread != null){
             mThread.cancel();
         }
@@ -78,6 +92,13 @@ public class Connections {
             }
         }
 
+        public void removeConnection(BluetoothDevice device){
+            ConnectedThread found = findConnection(device);
+            if(found != null){
+                connectedList.remove(found);
+            }
+        }
+
         public void releaseAllConnections(){
             Iterator iterator = connectedList.iterator();
             while(iterator.hasNext()){
@@ -94,9 +115,11 @@ public class Connections {
             ConnectedThread conn = null;
             while(iterator.hasNext()){
                 ConnectedThread mThread = (ConnectedThread)iterator.next();
-                if(device.equals(mThread.getDevice())){
-                    conn = mThread;
-                    break;
+                if(device != null && mThread != null){
+                    if(device.equals(mThread.getDevice())){
+                        conn = mThread;
+                        break;
+                    }
                 }
             }
             return conn;

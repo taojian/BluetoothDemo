@@ -1,5 +1,6 @@
 package com.cld.bluetooth;
 
+import android.bluetooth.BluetoothA2dp;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.content.BroadcastReceiver;
@@ -30,9 +31,15 @@ public class BluetoothDelegateAdapter {
     private ArrayList<BTEventListener> mEventListeners = new ArrayList<>();
     private boolean isEnabled = false;
     private MyHandler mHandler;
-    private static final int MSG_DEVICE_FOUND       = 1;
-    private static final int MSG_STATE_CHANGED      = 2;
-    private static final int MSG_DISCOVERY_FINISHED = 3;
+
+    public static final int MSG_DEVICE_FOUND       = 1;
+    public static final int MSG_DISCOVERY_FINISHED = 2;
+    public static final int MSG_CONNECTED          = 4;
+    public static final int MSG_CONNECT_FAILED     = 8;
+    public static final int MSG_DISCONNECTED       = 16;
+    public static final int MSG_STATE_CHANGED      = 32;
+    public static final int MSG_WRITE_FAILED       = 64;
+
 
     public BluetoothDelegateAdapter(Context context){
         this.mContext = context;
@@ -141,7 +148,10 @@ public class BluetoothDelegateAdapter {
         }
     }
 
-    protected void destroy(){
+    public void destroy(){
+        if(connManager != null){
+            connManager.stop();
+        }
         this.mContext.unregisterReceiver(this.deviceReceiver);
     }
 
@@ -160,6 +170,12 @@ public class BluetoothDelegateAdapter {
                         break;
                     case MSG_DISCOVERY_FINISHED:
                         listener.onDiscoveryFinished();
+                        break;
+                    case MSG_CONNECTED:
+                        listener.onDeviceConnected(device);
+                        break;
+                    case MSG_DISCONNECTED:
+                        listener.onDeviceDisconnected(device);
                         break;
                     default:
                         break;
@@ -195,7 +211,6 @@ public class BluetoothDelegateAdapter {
         public void handleMessage(Message msg) {
             super.handleMessage(msg);
 
-            String message = null;
             BluetoothDelegateAdapter adapter = this.mAdapter.get();
             Bundle bundle = msg.getData();
             adapter.onEventReceived(msg.what, (BluetoothDevice)msg.obj, bundle.getString("exception"));
@@ -228,7 +243,16 @@ public class BluetoothDelegateAdapter {
 
             }
             if(action.compareTo(BluetoothAdapter.ACTION_STATE_CHANGED) == 0){
-
+                if(intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, -1) == BluetoothAdapter.STATE_ON){
+                    if(BluetoothDelegateAdapter.this.connManager != null){
+                        BluetoothDelegateAdapter.this.connManager.start();
+                    }
+                }
+                if(intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, -1) == BluetoothAdapter.STATE_OFF ){
+                    if(BluetoothDelegateAdapter.this.connManager != null){
+                        BluetoothDelegateAdapter.this.connManager.stop();
+                    }
+                }
             }
             if(action.compareTo(BluetoothAdapter.ACTION_DISCOVERY_FINISHED) == 0){
                 BluetoothDelegateAdapter.this.onEventReceived(MSG_DISCOVERY_FINISHED, null, null);
