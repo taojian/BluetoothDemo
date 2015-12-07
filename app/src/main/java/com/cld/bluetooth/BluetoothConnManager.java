@@ -4,10 +4,16 @@ import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothSocket;
 import android.content.Context;
+import android.os.Build;
 import android.os.Handler;
+import android.os.Message;
 import android.util.Log;
 import com.cld.bluetooth.ConnectionListener.ConnectionReceiver;
+import com.cld.bluetooth.tools.SystemPropertiesProxy;
+
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.UUID;
 
 /**
@@ -74,10 +80,15 @@ public class BluetoothConnManager implements ConnectionReceiver {
         this.mConnections.write(device, buffer, length);
     }
 
-    public void connectFailed(BluetoothDevice device, String msg){
+    public void connectFailed(BluetoothDevice device, String exception){
         synchronized(this){
+            this.mConnectThread.cancel();
             this.mConnectThread = null;
         }
+        Message msg = mHandler.obtainMessage(BluetoothDelegateAdapter.MSG_CONNECT_FAILED);
+        msg.obj = device;
+        mHandler.sendMessage(msg);
+
     }
 
     @Override
@@ -93,11 +104,6 @@ public class BluetoothConnManager implements ConnectionReceiver {
 
         public ConnectThread(BluetoothDevice device){
             this.mmDevice = device;
-            /**
-             *取消已经的监听线程句柄和通信线程句柄
-             *
-             *
-             */
 
         }
 
@@ -109,6 +115,26 @@ public class BluetoothConnManager implements ConnectionReceiver {
 
             boolean connectResult = connectRfcommSocket();
             if(!connectResult){
+                Log.i(TAG, "---tj----connectRfcommSocket failed----");
+                try {
+                    sleep(500);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+
+                if(this.mmSocket != null){
+                    try {
+                        this.mmSocket.close();
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                }
+                //端口6访问
+                connectResult = connectWithChannel(6);
+            }
+
+            if(!connectResult){
+                Log.i(TAG, "---tj----connectWithChannel failed----");
                 try {
                     sleep(500);
                 } catch (InterruptedException e) {
@@ -133,21 +159,15 @@ public class BluetoothConnManager implements ConnectionReceiver {
             BluetoothConnManager.this.mConnections.connected(mmSocket, mmDevice);
         }
 
-
         private boolean connectRfcommSocket(){
             boolean result = false;
             int retryCount = 2;
 
-            try{
-                if(this.mmDevice != null) {
-                    this.mmSocket = this.mmDevice.createRfcommSocketToServiceRecord(SDPUUID);
-                }else{
-                    Log.e(TAG, "--tj---connect device is null-------");
-                }
-            } catch (IOException e) {
-                Log.e(TAG, "--tj--createRfcommSocketToServiceRecord--error--");
-                e.printStackTrace();
-
+            if(this.mmDevice != null) {
+                Log.i(TAG, "---tj---name---"+mmDevice.getName()+"---address--"+mmDevice.getAddress());
+                this.mmSocket = createSocket();
+            }else{
+                Log.e(TAG, "--tj---connect device is null-------");
             }
 
             while(true){
@@ -178,6 +198,82 @@ public class BluetoothConnManager implements ConnectionReceiver {
 
             return result;
         }
+
+        private boolean connectWithChannel(int channel) {
+            boolean result;
+            Log.i(TAG, "---tj---connectWithChannel-----" + channel + "---");
+            this.mmSocket = createSocketWithChannel(channel);
+
+            try {
+                this.mmSocket.connect();
+                result = true;
+            } catch (IOException e) {
+                result = false;
+                Log.e(TAG, "---tj----connectWithChanne---failed" + e.getMessage());
+            }
+            return result;
+        }
+
+        private BluetoothSocket createSocket() {
+            BluetoothSocket socket = null;
+            if(Build.VERSION.SDK_INT >= 10 && !SystemPropertiesProxy.isMediatekPlatform()) {
+                Class e = BluetoothDevice.class;
+                Method m = null;
+
+                try {
+                    m = e.getMethod("createInsecureRfcommSocketToServiceRecord", UUID.class);
+                } catch (NoSuchMethodException var9) {
+                    var9.printStackTrace();
+                }
+
+                if(m != null) {
+                    try {
+                        socket = (BluetoothSocket)m.invoke(this.mmDevice, SDPUUID);
+                    } catch (IllegalArgumentException e1) {
+                        e1.printStackTrace();
+                    } catch (IllegalAccessException e2) {
+                        e2.printStackTrace();
+                    } catch (InvocationTargetException e3) {
+                        e3.printStackTrace();
+                    }
+                }
+            } else {
+                try {
+                    socket = this.mmDevice.createRfcommSocketToServiceRecord(SDPUUID);
+                } catch (IOException e) {
+                    Log.e(TAG, "--tj--createRfcommSocketToServiceRecord--error--" + e.getMessage());
+                }
+            }
+
+            return socket;
+        }
+
+        private BluetoothSocket createSocketWithChannel(int channel) {
+            BluetoothSocket socket = null;
+            Class cls = BluetoothDevice.class;
+            Method m = null;
+
+            try {
+                m = cls.getMethod("createRfcommSocket", Integer.TYPE);
+            } catch (NoSuchMethodException e) {
+                e.printStackTrace();
+            }
+
+            if(m != null) {
+                try {
+                    socket = (BluetoothSocket)m.invoke(this.mmDevice, Integer.valueOf(channel));
+                } catch (IllegalArgumentException e1) {
+                    e1.printStackTrace();
+                } catch (IllegalAccessException e2) {
+                    e2.printStackTrace();
+                } catch (InvocationTargetException e3) {
+                    e3.printStackTrace();
+                }
+            }
+
+            return socket;
+        }
+
 
         public void cancel(){
             try{

@@ -34,7 +34,6 @@ public class ComActivity extends Activity implements OnClickListener{
         setUp(this);
         Intent mainActivity = this.getIntent();
         device = mainActivity.getParcelableExtra("DEVICE");
-        Log.i(TAG, "---tj----" + device.getName() + "-----" + device.getAddress());
     }
 
     private void setUp(Context context){

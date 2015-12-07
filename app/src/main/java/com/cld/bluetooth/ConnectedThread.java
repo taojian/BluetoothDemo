@@ -57,7 +57,7 @@ public class ConnectedThread extends Thread{
             System.arraycopy(buf, 0, this.buffer, 0, num);
             this.mmOutStream.write(this.buffer, 0, length);
             this.mmOutStream.flush();
-            Log.i(TAG, "---tj---send data----"+new String(this.buffer));
+            Log.i(TAG, "---tj---send data----"+new String(this.buffer, 0, length));
         }catch(IOException e){
             Message msg = this.mHandler.obtainMessage(BluetoothDelegateAdapter.MSG_WRITE_FAILED);
             msg.obj = this.mDevice;
