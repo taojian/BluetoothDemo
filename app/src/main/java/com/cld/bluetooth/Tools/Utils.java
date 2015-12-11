@@ -13,7 +13,6 @@ public class Utils {
             for(int i = pos; i < length; ++i) {
                 b[i] = (byte)(intValue >> 8 * (length - 1 - i) & 255);
             }
-
             result = true;
         }
 

@@ -73,7 +73,7 @@ final class ConnectionListener {
                     if(this.mmServerSocket == null) {
                         return;
                     }
-                    //阻塞等待
+                    //阻塞等待,返回成功的连接或者异常
                     socket = this.mmServerSocket.accept();
                 } catch (IOException var3) {
                     Log.i(TAG, "accept failed");

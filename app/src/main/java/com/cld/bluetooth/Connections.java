@@ -5,7 +5,7 @@ import android.bluetooth.BluetoothSocket;
 import android.os.Handler;
 import android.os.Message;
 import android.util.Log;
-import com.cld.bluetooth.BluetoothDelegateAdapter;
+import com.cld.bluetooth.BluetoothDelegateAdapter.DataReceiver;
 
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -19,7 +19,7 @@ public class Connections {
     private String TAG = "CLDLOGTAG";
     private ConnectionsList mList;
     private Handler mHandler;
-
+    private ArrayList<DataReceiver> dataReceivers = new ArrayList<>();
 
     public Connections(Handler handler){
         this.mList = new ConnectionsList();
@@ -27,9 +27,21 @@ public class Connections {
         this.mHandler = handler;
     }
 
+    public void registerDataReceiver(DataReceiver listener){
+        if(!dataReceivers.contains(listener)){
+            dataReceivers.add(listener);
+        }
+    }
+
+    public void unregisterDataReceiver(DataReceiver listener){
+        if(dataReceivers != null){
+            dataReceivers.remove(listener);
+        }
+    }
+
     public void connected(BluetoothSocket socket, BluetoothDevice device){
         Log.i(TAG, "-----tj------new  ConnectedThread----");
-        ConnectedThread conn = new ConnectedThread(socket, device, this.mHandler);
+        ConnectedThread conn = new ConnectedThread(socket, device, this.mHandler, dataReceivers);
         conn.start();
         if(this.mList != null){
             this.mList.addConnection(conn);

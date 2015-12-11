@@ -12,6 +12,11 @@ import java.io.BufferedOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.lang.reflect.Array;
+import java.util.ArrayList;
+import java.util.Iterator;
+
+import com.cld.bluetooth.BluetoothDelegateAdapter.DataReceiver;
 
 /**
  * Created by taojian on 2015/12/1.
@@ -27,12 +32,14 @@ public class ConnectedThread extends Thread{
     private byte[] buffer;
     private boolean isSocketReset = false;
     private Handler mHandler;
+    private ArrayList<DataReceiver> dataReceivers;
 
-    public ConnectedThread(BluetoothSocket socket, BluetoothDevice device, Handler handler){
+    public ConnectedThread(BluetoothSocket socket, BluetoothDevice device, Handler handler, ArrayList<DataReceiver> receivers){
 
         this.mSocket = socket;
         this.mDevice = device;
         this.mHandler = handler;
+        this.dataReceivers = receivers;
         InputStream tmpIn = null;
         OutputStream tmpOut = null;
         this.buffer = new byte[MAX_LEN];
@@ -83,7 +90,15 @@ public class ConnectedThread extends Thread{
         while(true){
             try{
                 Log.i(TAG, "----tj------mmInStream.read-----");
-                int bytes = this.mmInStream.read(buffer);       //间隔时间read，并没有阻塞挂起
+                //非阻塞操作
+                int bytes = this.mmInStream.read(buffer);
+                if(this.dataReceivers != null){
+                    Iterator iterator = dataReceivers.iterator();
+                    while(iterator.hasNext()){
+                        DataReceiver receiver = (DataReceiver) iterator.next();
+                        receiver.onDataReceive(this.mDevice, buffer, bytes);
+                    }
+                }
 
             }catch(IOException e){
                 Log.i(TAG, "--tj-----IOException-----"+e.getMessage());

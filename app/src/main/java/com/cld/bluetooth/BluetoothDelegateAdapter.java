@@ -12,6 +12,8 @@ import android.os.Message;
 import android.util.Log;
 
 import java.lang.ref.WeakReference;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Iterator;
 import android.os.Handler;
@@ -128,9 +130,14 @@ public class BluetoothDelegateAdapter {
     }
 
     public boolean connectDevice(BluetoothDevice device){
+        boolean result = connectDevice(device, 10);
+        return result;
+    }
+
+    public boolean connectDevice(BluetoothDevice device, int bondTime){
         boolean result = false;
         if(this.isEnabled()){
-            this.connManager.connect(device);
+            this.connManager.connect(device, bondTime);
             result = true;
         }
         return result;
@@ -200,6 +207,19 @@ public class BluetoothDelegateAdapter {
         }
     }
 
+    public void registerDataReceivers(DataReceiver receiver){
+        if(connManager != null){
+            connManager.registerDataReceivers(receiver);
+        }
+    }
+
+    public void unregisterDataReceivers(DataReceiver receiver){
+        if(connManager != null){
+            connManager.unregisterDataReceivers(receiver);
+        }
+    }
+
+
     private class MyHandler extends Handler{
 
         private WeakReference<BluetoothDelegateAdapter> mAdapter;
@@ -237,9 +257,20 @@ public class BluetoothDelegateAdapter {
 
             }
             if(action.compareTo(BluetoothDevice.ACTION_BOND_STATE_CHANGED) == 0){
-
+                dev = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
             }
             if(action.compareTo(BluetoothDevice.ACTION_PAIRING_REQUEST) == 0){
+                dev = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
+                int type = intent.getIntExtra(BluetoothDevice.EXTRA_PAIRING_VARIANT, BluetoothDevice.ERROR);
+                int paringKey = intent.getIntExtra(BluetoothDevice.EXTRA_PAIRING_KEY, BluetoothDevice.ERROR);
+                Log.i(TAG, "---tj----type---"+type+"----paringKey---"+paringKey);
+//                BluetoothDelegateAdapter.this.connManager.onPairingRequested(dev, type, paringKey);
+//                if(type == 2 || type == 4){
+//                    dev.setPairingConfirmation(true);
+//                }else if(type == 5){
+//                    String mPairingKey = String.format("%04d", new Object[]{Integer.valueOf(paringKey)});
+//                    dev.setPin(mPairingKey.getBytes());
+//                }
 
             }
             if(action.compareTo(BluetoothAdapter.ACTION_STATE_CHANGED) == 0){
@@ -259,6 +290,10 @@ public class BluetoothDelegateAdapter {
             }
 
         }
+    }
+
+    public interface DataReceiver{
+        void onDataReceive(BluetoothDevice device, byte[] data, int length);
     }
 
     public interface BTEventListener{

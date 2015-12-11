@@ -12,6 +12,8 @@ import com.cld.bluetooth.ConnectionListener.ConnectionReceiver;
 import com.cld.bluetooth.tools.SystemPropertiesProxy;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.UUID;
@@ -22,12 +24,15 @@ import java.util.UUID;
 public class BluetoothConnManager implements ConnectionReceiver {
 
     private static final String TAG = "CLDLOGTAG";
-    private static final UUID SDPUUID = UUID.fromString("00001101-0000-1000-8000-00805f9b34fb");
+    private static final UUID SDPUUID = UUID.fromString("00000000-0000-1000-8000-00805F9B34FB");
     private ConnectionListener mListener;
     private Connections mConnections;
     private ConnectThread mConnectThread;
     private BluetoothAdapter mAdapter = BluetoothAdapter.getDefaultAdapter();
     private Handler mHandler;
+    private String mPincode = "1234";
+    private boolean auth = true;
+    private boolean autoPair = true;
 
 
     public BluetoothConnManager(Context context, Handler handler){
@@ -63,12 +68,12 @@ public class BluetoothConnManager implements ConnectionReceiver {
         }
     }
 
-    public synchronized void connect(BluetoothDevice device){
+    public synchronized void connect(BluetoothDevice device, int bondTime){
         if(this.mConnectThread != null){
             this.mConnectThread.cancel();
             this.mConnectThread = null;
         }
-        this.mConnectThread = new ConnectThread(device);
+        this.mConnectThread = new ConnectThread(device, bondTime);
         this.mConnectThread.start();
     }
 
@@ -97,14 +102,27 @@ public class BluetoothConnManager implements ConnectionReceiver {
         this.mConnections.connected(socket, device);
     }
 
+    public void registerDataReceivers(BluetoothDelegateAdapter.DataReceiver receiver) {
+        if(this.mConnections != null){
+            this.mConnections.registerDataReceiver(receiver);
+        }
+    }
+
+    public void unregisterDataReceivers(BluetoothDelegateAdapter.DataReceiver receiver) {
+        if(this.mConnections != null) {
+            this.mConnections.unregisterDataReceiver(receiver);
+        }
+    }
+
     private class ConnectThread extends Thread{
 
-        private BluetoothDevice mmDevice;
-        private BluetoothSocket mmSocket;
+        private BluetoothDevice mmDevice = null;
+        private BluetoothSocket mmSocket = null;
+        private int mBondTime;
 
-        public ConnectThread(BluetoothDevice device){
+        public ConnectThread(BluetoothDevice device, int bondTime){
             this.mmDevice = device;
-
+            this.mBondTime = bondTime;
         }
 
         @Override
@@ -113,26 +131,33 @@ public class BluetoothConnManager implements ConnectionReceiver {
                 mAdapter.cancelDiscovery();
             }
 
+            if(BluetoothConnManager.this.autoPair){
+                Log.i(TAG, "---tj----start auto pair----");
+                this.doAutoPair();
+            }
+
             boolean connectResult = connectRfcommSocket();
             if(!connectResult){
                 Log.i(TAG, "---tj----connectRfcommSocket failed----");
-                try {
-                    sleep(500);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-
-                if(this.mmSocket != null){
+//                if(this.mmDevice.getBondState() == BluetoothDevice.BOND_BONDED){
                     try {
-                        this.mmSocket.close();
-                    } catch (IOException e) {
+                        sleep(500);
+                    } catch (InterruptedException e) {
                         e.printStackTrace();
                     }
-                }
-                //端口6访问
-                connectResult = connectWithChannel(6);
-            }
 
+                    if(this.mmSocket != null){
+                        try {
+                            this.mmSocket.close();
+                            this.mmSocket = null;
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                    //端口1无法连接，端口6可以
+                    connectResult = connectWithChannel(6);
+//                }
+            }
             if(!connectResult){
                 Log.i(TAG, "---tj----connectWithChannel failed----");
                 try {
@@ -144,6 +169,7 @@ public class BluetoothConnManager implements ConnectionReceiver {
                 if(this.mmSocket != null){
                     try {
                         this.mmSocket.close();
+                        this.mmSocket = null;
                     } catch (IOException e) {
                         e.printStackTrace();
                     }
@@ -159,6 +185,44 @@ public class BluetoothConnManager implements ConnectionReceiver {
             BluetoothConnManager.this.mConnections.connected(mmSocket, mmDevice);
         }
 
+        private void doAutoPair() {
+            boolean isPaired = false;
+            boolean bonding = false;
+            int during = 0;
+            for(; during < this.mBondTime * 2; ++during){
+                // 连接建立之前的先配对
+                Log.i(TAG, "---tj----start paring---"+this.mmDevice.getBondState());
+                if(this.mmDevice.getBondState() == BluetoothDevice.BOND_BONDED){
+                    Log.i(TAG, "----tj---bond success------------");
+                    isPaired = true;
+                    bonding = false;
+                    break;
+                }
+                if (this.mmDevice.getBondState() == BluetoothDevice.BOND_BONDING){
+                    Log.i(TAG, "----tj---bonding------------");
+                }else if (this.mmDevice.getBondState() == BluetoothDevice.BOND_NONE){
+                    if(!bonding){
+                        this.mmDevice.createBond();
+                        Log.i("TAG", "---tj---start pairing------");
+                        bonding = true;
+                    }else{
+                        Log.i("TAG", "---tj---pair failed------");
+                        bonding = false;
+                    }
+                }
+
+                try {
+                    sleep(500);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+
+            if(!isPaired && during >= this.mBondTime){
+                Log.i(TAG, "---tj-----bond timeout-----");
+            }
+        }
+
         private boolean connectRfcommSocket(){
             boolean result = false;
             int retryCount = 2;
@@ -170,9 +234,19 @@ public class BluetoothConnManager implements ConnectionReceiver {
                 Log.e(TAG, "--tj---connect device is null-------");
             }
 
+            if(SystemPropertiesProxy.isMediatekPlatform()) {
+                try {
+                    Log.i(TAG, "---tj-----it is MTK platform");
+                    sleep(3000L);
+                } catch (InterruptedException var6) {
+                    var6.printStackTrace();
+                }
+            }
+
             while(true){
                 try{
                     if(this.mmSocket != null){
+                        //阻塞操作，返回成功连接或者异常
                         this.mmSocket.connect();
                         result = true;
                         Log.i(TAG, "--tj---connect socket success!-----------");
@@ -180,19 +254,21 @@ public class BluetoothConnManager implements ConnectionReceiver {
                         Log.e(TAG, "--tj--connect socket is null-------");
                     }
                 }catch(IOException e){
-                    Log.i(TAG, "---tj----connect socket exception---" + e.getMessage());
-                    if(retryCount > 0){
-                        --retryCount;
-                        try {
-                            sleep(500);
-                        } catch (InterruptedException e1) {
-                            e1.printStackTrace();
+                    result = false;
+                    Log.e(TAG, "---tj----connect socket exception---" + e.getMessage());
+                    if(e.getMessage() != null && e.getMessage().equals("Service discovery failed")){
+                        if(retryCount > 0){
+                            --retryCount;
+                            try {
+                                sleep(500);
+                            } catch (InterruptedException e1) {
+                                e1.printStackTrace();
+                            }
+                            continue;
                         }
-                        continue;
+                        break;
                     }
-                    break;
                 }
-
                 break;
             }
 
@@ -201,10 +277,11 @@ public class BluetoothConnManager implements ConnectionReceiver {
 
         private boolean connectWithChannel(int channel) {
             boolean result;
-            Log.i(TAG, "---tj---connectWithChannel-----" + channel + "---");
+            Log.i(TAG, "---tj---start connectWithChannel-----" + channel + "---");
             this.mmSocket = createSocketWithChannel(channel);
 
             try {
+                //阻塞操作，返回成功连接或者异常
                 this.mmSocket.connect();
                 result = true;
             } catch (IOException e) {
@@ -219,7 +296,7 @@ public class BluetoothConnManager implements ConnectionReceiver {
             if(Build.VERSION.SDK_INT >= 10 && !SystemPropertiesProxy.isMediatekPlatform()) {
                 Class e = BluetoothDevice.class;
                 Method m = null;
-
+                Log.i(TAG, "---tj-----create socket reflect to service record----");
                 try {
                     m = e.getMethod("createInsecureRfcommSocketToServiceRecord", UUID.class);
                 } catch (NoSuchMethodException var9) {
@@ -254,7 +331,7 @@ public class BluetoothConnManager implements ConnectionReceiver {
             Method m = null;
 
             try {
-                m = cls.getMethod("createRfcommSocket", Integer.TYPE);
+                m = cls.getMethod("createRfcommSocket", new Class[]{int.class});
             } catch (NoSuchMethodException e) {
                 e.printStackTrace();
             }
@@ -270,7 +347,6 @@ public class BluetoothConnManager implements ConnectionReceiver {
                     e3.printStackTrace();
                 }
             }
-
             return socket;
         }
 
