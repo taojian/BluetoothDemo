@@ -12,8 +12,6 @@ import com.cld.bluetooth.ConnectionListener.ConnectionReceiver;
 import com.cld.bluetooth.tools.SystemPropertiesProxy;
 
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.UUID;
@@ -286,7 +284,7 @@ public class BluetoothConnManager implements ConnectionReceiver {
                 result = true;
             } catch (IOException e) {
                 result = false;
-                Log.e(TAG, "---tj----connectWithChanne---failed" + e.getMessage());
+                Log.e(TAG, "---tj----connectWithChannel---failed" + e.getMessage());
             }
             return result;
         }

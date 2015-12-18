@@ -11,11 +11,13 @@ import android.view.View;
 import android.widget.Button;
 import android.view.View.OnClickListener;
 import android.widget.EditText;
+import android.widget.TextView;
 
 import com.cld.bluetooth.BluetoothDelegateAdapter;
+import com.cld.bluetooth.BluetoothDelegateAdapter.DataReceiver;
 
 
-public class ComActivity extends Activity implements OnClickListener{
+public class ComActivity extends Activity implements OnClickListener, DataReceiver{
 
     private static final String TAG = "ComActivity";
     private BluetoothDelegateAdapter mAdapter = DemoManager.getDelegateAdapter();
@@ -25,6 +27,7 @@ public class ComActivity extends Activity implements OnClickListener{
     private Button btnSend;
     private Button btnClear;
     private EditText editData;
+    private TextView tvDataShow;
 
 
     @Override
@@ -34,6 +37,7 @@ public class ComActivity extends Activity implements OnClickListener{
         setUp(this);
         Intent mainActivity = this.getIntent();
         device = mainActivity.getParcelableExtra("DEVICE");
+        mAdapter.registerDataReceivers(this);
     }
 
     private void setUp(Context context){
@@ -46,7 +50,7 @@ public class ComActivity extends Activity implements OnClickListener{
         btnClear = (Button)this.findViewById(R.id.btn_clear);
         btnClear.setOnClickListener(this);
         editData = (EditText)this.findViewById(R.id.et_data);
-
+        tvDataShow = (TextView)this.findViewById(R.id.tv_receiveData);
     }
 
     @Override
@@ -64,9 +68,22 @@ public class ComActivity extends Activity implements OnClickListener{
                 mAdapter.send(device, buffer, buffer.length);
                 break;
             case R.id.btn_clear:
+                tvDataShow.setText("");
                 break;
             default:
                 break;
         }
+    }
+
+    @Override
+    protected void onDestroy() {
+        mAdapter.unregisterDataReceivers(this);
+        super.onDestroy();
+    }
+
+    @Override
+    public void onDataReceive(BluetoothDevice device, byte[] data, int length) {
+        String receiveData = new String(data, 0, length);
+        tvDataShow.setText(receiveData);
     }
 }

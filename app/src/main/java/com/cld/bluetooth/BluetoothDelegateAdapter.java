@@ -3,10 +3,12 @@ package com.cld.bluetooth;
 import android.bluetooth.BluetoothA2dp;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
+import android.bluetooth.BluetoothManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Message;
 import android.util.Log;
@@ -33,6 +35,7 @@ public class BluetoothDelegateAdapter {
     private ArrayList<BTEventListener> mEventListeners = new ArrayList<>();
     private boolean isEnabled = false;
     private MyHandler mHandler;
+    private BluetoothAdapter.LeScanCallback mLeScanCallback = null;
 
     public static final int MSG_DEVICE_FOUND       = 1;
     public static final int MSG_DISCOVERY_FINISHED = 2;
@@ -41,6 +44,7 @@ public class BluetoothDelegateAdapter {
     public static final int MSG_DISCONNECTED       = 16;
     public static final int MSG_STATE_CHANGED      = 32;
     public static final int MSG_WRITE_FAILED       = 64;
+    public static final int MSG_LE_SERVICES_DISCOVERED = 128;
 
 
     public BluetoothDelegateAdapter(Context context){
@@ -109,6 +113,43 @@ public class BluetoothDelegateAdapter {
             Log.i(TAG, "------tj----Bluetooth not enable----");
         }
 
+    }
+
+    public void startLeScan(int timeInSecond) {
+        if(this.isEnabled() && isLeSupported()) {
+            this.mLeScanCallback = new BluetoothAdapter.LeScanCallback() {
+                public void onLeScan(BluetoothDevice device, int rssi, byte[] scanRecord) {
+                    Message msg = BluetoothDelegateAdapter.this.mHandler.obtainMessage(MSG_DEVICE_FOUND);
+                    msg.obj = device;
+                    BluetoothDelegateAdapter.this.mHandler.sendMessage(msg);
+                }
+            };
+            this.mAdapter.startLeScan(this.mLeScanCallback);
+            this.mHandler.postDelayed(new Runnable() {
+                public void run() {
+                    BluetoothDelegateAdapter.this.stopLeScan();
+                }
+            }, (long)(timeInSecond * 1000));
+        }
+    }
+
+    public void stopLeScan() {
+        if(this.isEnabled() && isLeSupported()) {
+            this.mAdapter.stopLeScan(this.mLeScanCallback);
+            if(!this.mAdapter.isDiscovering()) {
+                this.onEventReceived(MSG_DISCOVERY_FINISHED, null, null);
+            }
+        }
+
+    }
+
+    public static boolean isLeSupported() {
+        if(Build.VERSION.SDK_INT >= 18) {
+            return true;
+        } else {
+            Log.e("BluetoothIBridgeAdapter", "BLE can not be supported");
+            return false;
+        }
     }
 
     public void setDiscoverable(boolean discoverable){
