@@ -15,9 +15,9 @@ import android.util.Log;
 import android.os.Handler;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.UUID;
 
 import static com.cld.bluetooth.BluetoothDelegateAdapter.*;
 
@@ -176,6 +176,93 @@ public class BluetoothConnManager4Le {
                 Log.i(TAG, "------GattDevice connect success----");
             }
 
+
+        }
+
+        public void setTargetUUIDs(String serviceUUID, String notifyCharacteristicUUID, String writeCharacteristicUUID) {
+            this.mGattServiceUUID = serviceUUID;
+            this.mWriteCharacteristicUUID = writeCharacteristicUUID;
+            this.mNotifyCharacteristicUUID = notifyCharacteristicUUID;
+            if(serviceUUID == "0000ff00-0000-1000-8000-00805f9b34fb") {
+                this.mMTUCharacteristicUUID = "0000ff03-0000-1000-8000-00805f9b34fb";
+            }
+
+            Iterator i$ = this.getSupportedGattServices().iterator();
+
+            while(i$.hasNext()) {
+                BluetoothGattService gattService = (BluetoothGattService)i$.next();
+                String serviceUUIDString = gattService.getUuid().toString();
+                if(serviceUUIDString != null && serviceUUIDString.equals(this.mGattServiceUUID)) {
+                    List gattCharacteristics = gattService.getCharacteristics();
+                    Iterator i$1 = gattCharacteristics.iterator();
+
+                    while(i$1.hasNext()) {
+                        BluetoothGattCharacteristic gattCharacteristic = (BluetoothGattCharacteristic)i$1.next();
+                        String characteristicUUIDString = gattCharacteristic.getUuid().toString();
+                        if(characteristicUUIDString.equals(this.mWriteCharacteristicUUID)) {
+                            this.mWriteCharacteristic = gattCharacteristic;
+                        }
+
+                        if(characteristicUUIDString.equals(this.mNotifyCharacteristicUUID)) {
+                            this.mNotifyCharacteristic = gattCharacteristic;
+                            this.setCharacteristicNotification(this.mNotifyCharacteristic, true);
+                        }
+
+                        if(characteristicUUIDString.equals(this.mMTUCharacteristicUUID)) {
+                            this.mMTUCharacteristic = gattCharacteristic;
+                            BluetoothConnManager4Le.this.credit = 0;
+                        }
+                    }
+
+                    return;
+                }
+            }
+
+        }
+
+        public void setMtu(int mtu) {
+            if(this.mBluetoothGatt != null) {
+                this.mBluetoothGatt.requestMtu(mtu);
+            }
+
+        }
+
+        public void write(byte[] buf, int length) {
+            if(this.mWriteCharacteristic != null) {
+                int len = length;
+
+                for(int off = 0; len > 0; len -= BluetoothConnManager4Le.this.mMtu) {
+                    byte[] buffer = new byte[BluetoothConnManager4Le.this.mMtu];
+                    if(len >= BluetoothConnManager4Le.this.mMtu) {
+                        System.arraycopy(buf, off, buffer, 0, BluetoothConnManager4Le.this.mMtu);
+                    } else {
+                        System.arraycopy(buf, off, buffer, 0, len);
+                    }
+
+                    if(this.mMTUCharacteristic != null) {
+                        if(BluetoothConnManager4Le.this.credit > 0) {
+                            this.mWriteCharacteristic.setValue(buffer);
+                            this.mWriteCharacteristic.setWriteType(1);
+                            this.writeCharacteristic(this.mWriteCharacteristic);
+//                            BluetoothConnManager4Le.access$310(BluetoothConnManager4Le.this);
+                        }
+                    } else {
+                        this.mWriteCharacteristic.setValue(buffer);
+                        this.mWriteCharacteristic.setWriteType(1);
+                        this.writeCharacteristic(this.mWriteCharacteristic);
+                    }
+
+                    off += BluetoothConnManager4Le.this.mMtu;
+                }
+            }
+
+        }
+
+        public void writeCharacteristic(BluetoothGattCharacteristic characteristic) {
+            boolean flag = false;
+            if(this.mBluetoothGatt != null) {
+                this.mBluetoothGatt.writeCharacteristic(characteristic);
+            }
 
         }
 
@@ -339,8 +426,110 @@ public class BluetoothConnManager4Le {
 
         }
 
+        public BluetoothDevice getDevice() {
+            return this.device;
+        }
+
+    }
 
 
+    private class ConnectionList {
+        private List<GattConnection> mConnectedDevices;
+        private byte[] LOCK;
+
+        private ConnectionList() {
+            this.mConnectedDevices = new ArrayList();
+            this.LOCK = new byte[0];
+        }
+
+        public void write(BluetoothDevice device, byte[] buffer, int length) {
+            if(null != device && null != buffer && length > 0) {
+                GattConnection found = this.foundDevice(device);
+                if(null != found) {
+                    found.write(buffer, length);
+                }
+
+            }
+        }
+
+        public void addConnection(GattConnection connection) {
+            GattConnection found = this.foundDevice(connection.getDevice());
+            byte[] var3;
+            if(found != null) {
+                var3 = this.LOCK;
+                synchronized(this.LOCK) {
+                    this.mConnectedDevices.remove(found);
+                }
+            }
+
+            var3 = this.LOCK;
+            synchronized(this.LOCK) {
+                this.mConnectedDevices.add(connection);
+            }
+        }
+
+        private GattConnection foundDevice(BluetoothDevice device) {
+            GattConnection found = null;
+            byte[] var3 = this.LOCK;
+            synchronized(this.LOCK) {
+                Iterator i$ = this.mConnectedDevices.iterator();
+
+                while(i$.hasNext()) {
+                    GattConnection ds = (GattConnection)i$.next();
+                    if(device.equals(ds.getDevice())) {
+                        found = ds;
+                        break;
+                    }
+                }
+
+                return found;
+            }
+        }
+
+        public List<BluetoothDevice> getCurrentConnectedDevice() {
+            ArrayList devicesList = new ArrayList();
+            byte[] var2 = this.LOCK;
+            synchronized(this.LOCK) {
+                Iterator i$ = this.mConnectedDevices.iterator();
+
+                while(i$.hasNext()) {
+                    GattConnection ds = (GattConnection)i$.next();
+                    BluetoothDevice device = ds.getDevice();
+                    if(device != null && !devicesList.contains(device)) {
+                        devicesList.add(device);
+                    }
+                }
+
+                return devicesList;
+            }
+        }
+
+        public void clear() {
+            byte[] var1 = this.LOCK;
+            synchronized(this.LOCK) {
+                this.mConnectedDevices.clear();
+            }
+        }
+
+        public void releaseAllConnections() {
+            byte[] var1 = this.LOCK;
+            synchronized(this.LOCK) {
+                Iterator i$ = this.mConnectedDevices.iterator();
+
+                while(true) {
+                    if(!i$.hasNext()) {
+                        break;
+                    }
+
+                    GattConnection ds = (GattConnection)i$.next();
+                    if(ds != null) {
+                        ds.close();
+                    }
+                }
+            }
+
+            this.mConnectedDevices.clear();
+        }
     }
 
 }

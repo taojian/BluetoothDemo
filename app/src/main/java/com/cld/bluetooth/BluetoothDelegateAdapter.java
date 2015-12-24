@@ -125,6 +125,7 @@ public class BluetoothDelegateAdapter {
                 }
             };
             this.mAdapter.startLeScan(this.mLeScanCallback);
+            //为了尽量减少功能，在扫描到设备或持续扫描一段时间后，应该停止扫描
             this.mHandler.postDelayed(new Runnable() {
                 public void run() {
                     BluetoothDelegateAdapter.this.stopLeScan();
