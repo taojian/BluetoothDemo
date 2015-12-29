@@ -14,14 +14,15 @@ import java.lang.reflect.Method;
 final class ConnectionListener {
     private static final String TAG = "CLDLOGTAG";
     static final UUID SDPUUID = UUID.fromString("00001101-0000-1000-8000-00805f9b34fb");
-    private BluetoothAdapter mAdapter;
+    private BluetoothAdapter mAdapter = BluetoothAdapter.getDefaultAdapter();
     private ConnectionListener.ConnectionReceiver mReceiver;
     private ConnectionListener.AcceptThread mThread;
+    private boolean mAuthenticated;
 
 
-    public ConnectionListener(ConnectionReceiver receiver, BluetoothAdapter adapter) {
+    public ConnectionListener(ConnectionReceiver receiver, boolean auth) {
         this.mReceiver = receiver;
-        this.mAdapter = adapter;
+        this.mAuthenticated = auth;
     }
 
     public void start() {
@@ -36,6 +37,15 @@ final class ConnectionListener {
     public void stop() {
         if(this.mThread != null) {
             this.mThread.cancel();
+        }
+
+    }
+
+    void setLinkKeyNeedAuthenticated(boolean authenticated) {
+        if(this.mAuthenticated != authenticated) {
+            this.mAuthenticated = authenticated;
+            this.stop();
+            this.start();
         }
 
     }
@@ -57,8 +67,8 @@ final class ConnectionListener {
                     tmp = ConnectionListener.this.mAdapter.listenUsingRfcommWithServiceRecord(SERVICE_NAME, SDPUUID);
                     Log.i(TAG, "secure rfcomm " + tmp);
                 }
-            } catch (IOException var4) {
-                Log.e("ConnListener", "Connection listen failed", var4);
+            } catch (IOException e) {
+                Log.e("ConnListener", "Connection listen failed", e);
             }
 
             this.mmServerSocket = tmp;
@@ -75,7 +85,7 @@ final class ConnectionListener {
                     }
                     //阻塞等待,返回成功的连接或者异常
                     socket = this.mmServerSocket.accept();
-                } catch (IOException var3) {
+                } catch (IOException e) {
                     Log.i(TAG, "accept failed");
                     return;
                 }
@@ -92,7 +102,7 @@ final class ConnectionListener {
                 if(this.mmServerSocket != null) {
                     this.mmServerSocket.close();
                 }
-            } catch (IOException var2) {
+            } catch (IOException e) {
             }
 
         }
@@ -101,17 +111,17 @@ final class ConnectionListener {
             BluetoothServerSocket socket = null;
 
             try {
-                Class e = BluetoothAdapter.class;
-                Method m = e.getMethod("listenUsingInsecureRfcommWithServiceRecord", new Class[]{String.class, UUID.class});
+                Class<?> c = BluetoothAdapter.class;
+                Method m = c.getMethod("listenUsingInsecureRfcommWithServiceRecord", new Class[]{String.class, UUID.class});
                 socket = (BluetoothServerSocket)m.invoke(ConnectionListener.this.mAdapter, new Object[]{serviceName, serviceUUID});
-            } catch (NoSuchMethodException var6) {
-                var6.printStackTrace();
-            } catch (IllegalArgumentException var7) {
-                var7.printStackTrace();
-            } catch (IllegalAccessException var8) {
-                var8.printStackTrace();
-            } catch (InvocationTargetException var9) {
-                var9.printStackTrace();
+            } catch (NoSuchMethodException e) {
+                e.printStackTrace();
+            } catch (IllegalArgumentException e) {
+                e.printStackTrace();
+            } catch (IllegalAccessException e) {
+                e.printStackTrace();
+            } catch (InvocationTargetException e) {
+                e.printStackTrace();
             }
 
             return socket;

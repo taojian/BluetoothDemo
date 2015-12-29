@@ -1,9 +1,8 @@
 package com.cld.bluetooth;
 
-import android.bluetooth.BluetoothA2dp;
+
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
-import android.bluetooth.BluetoothManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -171,12 +170,12 @@ public class BluetoothDelegateAdapter {
             return null;
     }
 
-    public boolean connectDevice(BluetoothDevice device){
+    public boolean connectDevice(CldBluetoothDevice device){
         boolean result = connectDevice(device, 10);
         return result;
     }
 
-    public boolean connectDevice(BluetoothDevice device, int bondTime){
+    public boolean connectDevice(CldBluetoothDevice device, int bondTime){
         boolean result = false;
         if(this.isEnabled()){
             this.connManager.connect(device, bondTime);
@@ -185,13 +184,13 @@ public class BluetoothDelegateAdapter {
         return result;
     }
 
-    public void disconnectDevice(BluetoothDevice device){
+    public void disconnectDevice(CldBluetoothDevice device){
         if(this.isEnabled()){
             this.connManager.disconnect(device);
         }
     }
 
-    public void send(BluetoothDevice device, byte[] buffer, int length){
+    public void send(CldBluetoothDevice device, byte[] buffer, int length){
         if(this.isEnabled() && device != null){
             this.connManager.write(device, buffer, length);
         }
@@ -204,7 +203,7 @@ public class BluetoothDelegateAdapter {
         this.mContext.unregisterReceiver(this.deviceReceiver);
     }
 
-    protected void onEventReceived(int what, BluetoothDevice device, String message){
+    protected void onEventReceived(int what, CldBluetoothDevice device, String message){
         if(mEventListeners == null){
             return;
         }
@@ -275,7 +274,7 @@ public class BluetoothDelegateAdapter {
 
             BluetoothDelegateAdapter adapter = this.mAdapter.get();
             Bundle bundle = msg.getData();
-            adapter.onEventReceived(msg.what, (BluetoothDevice)msg.obj, bundle.getString("exception"));
+            adapter.onEventReceived(msg.what, (CldBluetoothDevice)msg.obj, bundle.getString("exception"));
 
         }
     }
@@ -295,18 +294,23 @@ public class BluetoothDelegateAdapter {
             Log.i(TAG, "---tj----broadcast message------" + action.toString());
             if(action.compareTo(BluetoothDevice.ACTION_FOUND) == 0){
                 dev = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
-                BluetoothDelegateAdapter.this.onEventReceived(MSG_DEVICE_FOUND, dev, exceptionMessage);
+                BluetoothDelegateAdapter.this.onEventReceived(MSG_DEVICE_FOUND, CldBluetoothDeviceFactory.getDefaultFactory().createDevice(dev, CldBluetoothDevice.DEVICE_TYPE_CLASSIC), exceptionMessage);
 
             }
             if(action.compareTo(BluetoothDevice.ACTION_BOND_STATE_CHANGED) == 0){
                 dev = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
+                CldBluetoothDevice device = CldBluetoothDeviceFactory.getDefaultFactory().createDevice(dev, CldBluetoothDevice.DEVICE_TYPE_CLASSIC);
+                if(device != null){
+                    device.setBondStatus();
+                }
             }
             if(action.compareTo(BluetoothDevice.ACTION_PAIRING_REQUEST) == 0){
                 dev = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
+                CldBluetoothDevice device = CldBluetoothDeviceFactory.getDefaultFactory().createDevice(dev, CldBluetoothDevice.DEVICE_TYPE_CLASSIC);
                 int type = intent.getIntExtra(BluetoothDevice.EXTRA_PAIRING_VARIANT, BluetoothDevice.ERROR);
                 int paringKey = intent.getIntExtra(BluetoothDevice.EXTRA_PAIRING_KEY, BluetoothDevice.ERROR);
                 Log.i(TAG, "---tj----type---"+type+"----paringKey---"+paringKey);
-//                BluetoothDelegateAdapter.this.connManager.onPairingRequested(dev, type, paringKey);
+                BluetoothDelegateAdapter.this.connManager.onPairingRequested(device, type, paringKey);
 //                if(type == 2 || type == 4){
 //                    dev.setPairingConfirmation(true);
 //                }else if(type == 5){
@@ -335,18 +339,18 @@ public class BluetoothDelegateAdapter {
     }
 
     public interface DataReceiver{
-        void onDataReceive(BluetoothDevice device, byte[] data, int length);
+        void onDataReceive(CldBluetoothDevice device, byte[] data, int length);
     }
 
     public interface BTEventListener{
         void onDiscoveryFinished();
 
-        void onDeviceFound(BluetoothDevice device);
+        void onDeviceFound(CldBluetoothDevice device);
 
-        void onDeviceConnected(BluetoothDevice device);
+        void onDeviceConnected(CldBluetoothDevice device);
 
-        void onDeviceConnectFailed(BluetoothDevice device);
+        void onDeviceConnectFailed(CldBluetoothDevice device);
 
-        void onDeviceDisconnected(BluetoothDevice device);
+        void onDeviceDisconnected(CldBluetoothDevice device);
     }
 }

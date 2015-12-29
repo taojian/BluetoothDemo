@@ -1,6 +1,6 @@
 package com.cld.bluetooth;
 
-import android.bluetooth.BluetoothDevice;
+
 import android.bluetooth.BluetoothSocket;
 import android.os.Handler;
 import android.os.Message;
@@ -9,6 +9,7 @@ import com.cld.bluetooth.BluetoothDelegateAdapter.DataReceiver;
 
 import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.List;
 
 
 /**
@@ -39,7 +40,7 @@ public class Connections {
         }
     }
 
-    public void connected(BluetoothSocket socket, BluetoothDevice device){
+    public void connected(BluetoothSocket socket, CldBluetoothDevice device){
         Log.i(TAG, "-----tj------new  ConnectedThread----");
         ConnectedThread conn = new ConnectedThread(socket, device, this.mHandler, dataReceivers);
         conn.start();
@@ -52,7 +53,7 @@ public class Connections {
     }
 
 
-    public void disconnect(BluetoothDevice device){
+    public void disconnect(CldBluetoothDevice device){
         if(device == null){
             return;
         }
@@ -67,11 +68,16 @@ public class Connections {
         this.mList.releaseAllConnections();
     }
 
-    public void write(BluetoothDevice device, byte[] buffer, int length) {
+    public List<CldBluetoothDevice> getCurrentConnectedDevice() {
+        return this.mList.getCurrentConnectedDevice();
+    }
+
+    public void write(CldBluetoothDevice device, byte[] buffer, int length) {
         this.mList.write(device, buffer, length);
     }
 
     private class ConnectionsList{
+        private byte[] LOCK;
         private ConnectedThread mThread;
         private ArrayList<ConnectedThread> connectedList;
 
@@ -84,7 +90,7 @@ public class Connections {
             }
         }
 
-        public void write(BluetoothDevice device, byte[] buffer, int length){
+        public void write(CldBluetoothDevice device, byte[] buffer, int length){
             if(device != null && buffer != null && length > 0){
                 ConnectedThread found = this.findConnection(device);
                 if(found != null){
@@ -104,10 +110,28 @@ public class Connections {
             }
         }
 
-        public void removeConnection(BluetoothDevice device){
+        public void removeConnection(CldBluetoothDevice device){
             ConnectedThread found = findConnection(device);
             if(found != null){
                 connectedList.remove(found);
+            }
+        }
+
+        public List<CldBluetoothDevice> getCurrentConnectedDevice() {
+            ArrayList devicesList = new ArrayList();
+            byte[] var2 = this.LOCK;
+            synchronized(this.LOCK) {
+                Iterator i$ = this.connectedList.iterator();
+
+                while(i$.hasNext()) {
+                    ConnectedThread ds = (ConnectedThread)i$.next();
+                    CldBluetoothDevice device = ds.getDevice();
+                    if(device != null && !devicesList.contains(device)) {
+                        devicesList.add(device);
+                    }
+                }
+
+                return devicesList;
             }
         }
 
@@ -122,7 +146,7 @@ public class Connections {
             connectedList.clear();
         }
 
-        private ConnectedThread findConnection(BluetoothDevice device){
+        private ConnectedThread findConnection(CldBluetoothDevice device){
             Iterator iterator = connectedList.iterator();
             ConnectedThread conn = null;
             while(iterator.hasNext()){

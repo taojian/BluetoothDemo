@@ -1,6 +1,6 @@
 package com.cld.bluetooth;
 
-import android.bluetooth.BluetoothDevice;
+
 import android.bluetooth.BluetoothSocket;
 import android.os.Bundle;
 import android.os.Handler;
@@ -25,7 +25,7 @@ public class ConnectedThread extends Thread{
 
     private final String TAG = "CLDLOGTAG";
     private final BluetoothSocket mSocket;      //socket句柄
-    private final BluetoothDevice mDevice;      //主动连接设备
+    private final CldBluetoothDevice mDevice;      //主动连接设备
     private final InputStream mmInStream;
     private final OutputStream mmOutStream;
     private static final int MAX_LEN = 65536;
@@ -34,7 +34,7 @@ public class ConnectedThread extends Thread{
     private Handler mHandler;
     private ArrayList<DataReceiver> dataReceivers;
 
-    public ConnectedThread(BluetoothSocket socket, BluetoothDevice device, Handler handler, ArrayList<DataReceiver> receivers){
+    public ConnectedThread(BluetoothSocket socket, CldBluetoothDevice device, Handler handler, ArrayList<DataReceiver> receivers){
 
         this.mSocket = socket;
         this.mDevice = device;
@@ -80,7 +80,7 @@ public class ConnectedThread extends Thread{
         resetSocket(this.mSocket);
     }
 
-    public BluetoothDevice getDevice(){
+    public CldBluetoothDevice getDevice(){
         return this.mDevice;
     }
 

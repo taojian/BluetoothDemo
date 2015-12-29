@@ -5,15 +5,20 @@ import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothSocket;
 import android.content.Context;
 import android.os.Build;
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
 import android.util.Log;
 import com.cld.bluetooth.ConnectionListener.ConnectionReceiver;
 import com.cld.bluetooth.tools.SystemPropertiesProxy;
+import com.cld.bluetooth.CldBluetoothDevice.BondStatus;
+import com.cld.bluetooth.CldBluetoothDevice.ConnectStatus;
+import com.cld.bluetooth.CldBluetoothDevice.Direction;
 
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -31,6 +36,7 @@ public class BluetoothConnManager implements ConnectionReceiver {
     private String mPincode = "1234";
     private boolean auth = true;
     private boolean autoPair = true;
+    String lastExceptionMsg = null;
 
 
     public BluetoothConnManager(Context context, Handler handler){
@@ -40,7 +46,7 @@ public class BluetoothConnManager implements ConnectionReceiver {
 
     public synchronized void start(){
         if(this.mListener == null){
-            this.mListener = new ConnectionListener(this, mAdapter);
+            this.mListener = new ConnectionListener(this, this.auth);
         }
         this.mListener.start();
 
@@ -66,7 +72,7 @@ public class BluetoothConnManager implements ConnectionReceiver {
         }
     }
 
-    public synchronized void connect(BluetoothDevice device, int bondTime){
+    public synchronized void connect(CldBluetoothDevice device, int bondTime){
         if(this.mConnectThread != null){
             this.mConnectThread.cancel();
             this.mConnectThread = null;
@@ -75,28 +81,82 @@ public class BluetoothConnManager implements ConnectionReceiver {
         this.mConnectThread.start();
     }
 
-    public synchronized void disconnect(BluetoothDevice device){
+    public synchronized void disconnect(CldBluetoothDevice device){
         this.mConnections.disconnect(device);
     }
 
-    public void write(BluetoothDevice device, byte[] buffer, int length){
+    public void write(CldBluetoothDevice device, byte[] buffer, int length){
         this.mConnections.write(device, buffer, length);
     }
 
-    public void connectFailed(BluetoothDevice device, String exception){
+    public void connectFailed(CldBluetoothDevice device, String exception){
         synchronized(this){
             this.mConnectThread.cancel();
             this.mConnectThread = null;
         }
         Message msg = mHandler.obtainMessage(BluetoothDelegateAdapter.MSG_CONNECT_FAILED);
         msg.obj = device;
+        Bundle bundle = new Bundle();
+        bundle.putString("exception", exception);
+        msg.setData(bundle);
         mHandler.sendMessage(msg);
+
+    }
+
+    List<CldBluetoothDevice> getCurrentConnectedDevice() {
+        List devicesList = null;
+        devicesList = this.mConnections.getCurrentConnectedDevice();
+        return devicesList;
+    }
+
+    public void setPincode(String pincode) {
+        this.mPincode = pincode;
+    }
+
+    public void setAutoBond(boolean auto) {
+        this.autoPair = auto;
+    }
+
+    void setLinkKeyNeedAuthenticated(boolean authenticated) {
+        if(this.mListener != null) {
+            this.auth = authenticated;
+            this.mListener.setLinkKeyNeedAuthenticated(authenticated);
+        }
+
+    }
+
+    void onPairingRequested(CldBluetoothDevice device, int type, int pairingKey) {
+        String mPairingKey;
+        switch(type) {
+            case 0:
+                device.setPin(this.mPincode.getBytes());
+            case 1:
+            default:
+                break;
+            case 2:
+            case 3:
+                device.setPairingConfirmation(true);
+                break;
+            case 4:
+                mPairingKey = String.format("%06d", new Object[]{Integer.valueOf(pairingKey)});
+                device.setPairingConfirmation(true);
+                break;
+            case 5:
+                mPairingKey = String.format("%04d", new Object[]{Integer.valueOf(pairingKey)});
+                device.setPin(mPairingKey.getBytes());
+        }
 
     }
 
     @Override
     public void onConnectionEstablished(BluetoothSocket socket) {
-        BluetoothDevice device = socket.getRemoteDevice();
+        CldBluetoothDevice device = CldBluetoothDeviceFactory
+                .getDefaultFactory().createDevice(socket.getRemoteDevice(),
+                        CldBluetoothDevice.DEVICE_TYPE_CLASSIC);
+        if(device != null){
+            device.setConnectionDirection(Direction.DIRECTION_BACKWARD);
+            device.setBondStatus();
+        }
         this.mConnections.connected(socket, device);
     }
 
@@ -114,19 +174,27 @@ public class BluetoothConnManager implements ConnectionReceiver {
 
     private class ConnectThread extends Thread{
 
-        private BluetoothDevice mmDevice = null;
+        private CldBluetoothDevice mmDevice = null;
         private BluetoothSocket mmSocket = null;
         private int mBondTime;
+        private String name;
+        private boolean cancelBond = false;
 
-        public ConnectThread(BluetoothDevice device, int bondTime){
+        public ConnectThread(CldBluetoothDevice device, int bondTime){
             this.mmDevice = device;
             this.mBondTime = bondTime;
+            this.name = device.getDeviceName();
         }
 
         @Override
         public void run() {
+            this.setName("ConnectThread" + this.name);
             if(mAdapter != null) {
                 mAdapter.cancelDiscovery();
+            }
+
+            if(this.mmDevice != null){
+                this.mmDevice.setConnectStatus(ConnectStatus.STATUS_CONNECTTING);
             }
 
             if(BluetoothConnManager.this.autoPair){
@@ -137,7 +205,7 @@ public class BluetoothConnManager implements ConnectionReceiver {
             boolean connectResult = connectRfcommSocket();
             if(!connectResult){
                 Log.i(TAG, "---tj----connectRfcommSocket failed----");
-//                if(this.mmDevice.getBondState() == BluetoothDevice.BOND_BONDED){
+                if(this.mmDevice.getBondStatus() == BondStatus.STATE_BONDED){
                     try {
                         sleep(500);
                     } catch (InterruptedException e) {
@@ -154,7 +222,7 @@ public class BluetoothConnManager implements ConnectionReceiver {
                     }
                     //端口1无法连接，端口6可以
                     connectResult = connectWithChannel(6);
-//                }
+                }
             }
             if(!connectResult){
                 Log.i(TAG, "---tj----connectWithChannel failed----");
@@ -173,14 +241,20 @@ public class BluetoothConnManager implements ConnectionReceiver {
                     }
                 }
 
-                BluetoothConnManager.this.connectFailed(this.mmDevice, null);
+                BluetoothConnManager.this.connectFailed(this.mmDevice, BluetoothConnManager.this.lastExceptionMsg);
                 synchronized(BluetoothConnManager.this){
                     BluetoothConnManager.this.mConnectThread = null;
                 }
                 return;
             }
 
+            if(this.mmDevice != null){
+                this.mmDevice.setConnectionDirection(CldBluetoothDevice.Direction.DIRECTION_FORWARD);
+                this.mmDevice.setBondStatus();
+            }
+
             BluetoothConnManager.this.mConnections.connected(mmSocket, mmDevice);
+            Log.i(TAG, "----tj---connected!---");
         }
 
         private void doAutoPair() {
@@ -188,24 +262,33 @@ public class BluetoothConnManager implements ConnectionReceiver {
             boolean bonding = false;
             int during = 0;
             for(; during < this.mBondTime * 2; ++during){
+                BluetoothDevice device = BluetoothConnManager.this.mAdapter.getRemoteDevice(this.mmDevice.getDeviceAddress());
                 // 连接建立之前的先配对
-                Log.i(TAG, "---tj----start paring---"+this.mmDevice.getBondState());
-                if(this.mmDevice.getBondState() == BluetoothDevice.BOND_BONDED){
+                Log.i(TAG, "---tj----start paring---"+this.mmDevice.getBondStatus());
+                if(device.getBondState() == BluetoothDevice.BOND_BONDED){
                     Log.i(TAG, "----tj---bond success------------");
                     isPaired = true;
                     bonding = false;
+                    this.mmDevice.setBondStatus(BondStatus.STATE_BONDED);
                     break;
                 }
-                if (this.mmDevice.getBondState() == BluetoothDevice.BOND_BONDING){
+                if (device.getBondState() == BluetoothDevice.BOND_BONDING){
                     Log.i(TAG, "----tj---bonding------------");
-                }else if (this.mmDevice.getBondState() == BluetoothDevice.BOND_NONE){
-                    if(!bonding){
-                        this.mmDevice.createBond();
-                        Log.i("TAG", "---tj---start pairing------");
-                        bonding = true;
-                    }else{
-                        Log.i("TAG", "---tj---pair failed------");
-                        bonding = false;
+                    this.mmDevice.setBondStatus(BondStatus.STATE_BONDING);
+                }else if (device.getBondState() == BluetoothDevice.BOND_NONE){
+                    try{
+                        if(!bonding){
+                            this.mmDevice.createBond();
+                            Log.i("TAG", "---tj---start pairing------");
+                            bonding = true;
+                            this.mmDevice.setBondStatus(BondStatus.STATE_BONDING);
+                        }else{
+                            Log.i("TAG", "---tj---pair failed------");
+                            bonding = false;
+                            this.mmDevice.setBondStatus(BondStatus.STATE_BONDFAILED);
+                        }
+                    }catch(Exception e){
+                        e.printStackTrace();
                     }
                 }
 
@@ -216,9 +299,15 @@ public class BluetoothConnManager implements ConnectionReceiver {
                 }
             }
 
-            if(!isPaired && during >= this.mBondTime){
+            if(this.cancelBond){
+                Log.i(TAG, "----tj----bond canceled---");
+                this.mmDevice.setBondStatus(BondStatus.STATE_BOND_CANCLED);
+            }else if(!isPaired && during >= this.mBondTime){
                 Log.i(TAG, "---tj-----bond timeout-----");
+                this.mmDevice.setBondStatus(BondStatus.STATE_BOND_OVERTIME);
             }
+
+            Log.i(TAG , "---tj----doAutoPair--");
         }
 
         private boolean connectRfcommSocket(){
@@ -226,8 +315,8 @@ public class BluetoothConnManager implements ConnectionReceiver {
             int retryCount = 2;
 
             if(this.mmDevice != null) {
-                Log.i(TAG, "---tj---name---"+mmDevice.getName()+"---address--"+mmDevice.getAddress());
-                this.mmSocket = createSocket();
+                Log.i(TAG, "---tj---name---"+mmDevice.getDeviceName()+"---address--"+mmDevice.getDeviceAddress());
+                this.mmSocket = this.mmDevice.createSocket();
             }else{
                 Log.e(TAG, "--tj---connect device is null-------");
             }
@@ -250,6 +339,7 @@ public class BluetoothConnManager implements ConnectionReceiver {
                         Log.i(TAG, "--tj---connect socket success!-----------");
                     }else {
                         Log.e(TAG, "--tj--connect socket is null-------");
+                        BluetoothConnManager.this.lastExceptionMsg = "socket is null";
                     }
                 }catch(IOException e){
                     result = false;
@@ -263,8 +353,13 @@ public class BluetoothConnManager implements ConnectionReceiver {
                                 e1.printStackTrace();
                             }
                             continue;
+                        }else{
+                            BluetoothConnManager.this.lastExceptionMsg = e.getMessage();
                         }
                         break;
+                    }else{
+                        Log.e(TAG, "---tj---connect failed----");
+                        BluetoothConnManager.this.lastExceptionMsg = e.getMessage();
                     }
                 }
                 break;
@@ -276,7 +371,7 @@ public class BluetoothConnManager implements ConnectionReceiver {
         private boolean connectWithChannel(int channel) {
             boolean result;
             Log.i(TAG, "---tj---start connectWithChannel-----" + channel + "---");
-            this.mmSocket = createSocketWithChannel(channel);
+            this.mmSocket = this.mmDevice.createSocketWithChannel(channel);
 
             try {
                 //阻塞操作，返回成功连接或者异常
@@ -285,7 +380,9 @@ public class BluetoothConnManager implements ConnectionReceiver {
             } catch (IOException e) {
                 result = false;
                 Log.e(TAG, "---tj----connectWithChannel---failed" + e.getMessage());
+                BluetoothConnManager.this.lastExceptionMsg = e.getMessage();
             }
+            Log.i(TAG, "----tj----end connectWithChannel-------");
             return result;
         }
 
@@ -313,11 +410,11 @@ public class BluetoothConnManager implements ConnectionReceiver {
                     }
                 }
             } else {
-                try {
-                    socket = this.mmDevice.createRfcommSocketToServiceRecord(SDPUUID);
-                } catch (IOException e) {
-                    Log.e(TAG, "--tj--createRfcommSocketToServiceRecord--error--" + e.getMessage());
-                }
+//                try {
+////                    socket = this.mmDevice.createRfcommSocketToServiceRecord(SDPUUID);
+//                } catch (IOException e) {
+//                    Log.e(TAG, "--tj--createRfcommSocketToServiceRecord--error--" + e.getMessage());
+//                }
             }
 
             return socket;
@@ -361,5 +458,9 @@ public class BluetoothConnManager implements ConnectionReceiver {
             Log.i(TAG, "---tj---connectThread cancel----socket close---");
         }
 
+        public void cancelBondProcess(){
+            Log.i(TAG, "----tj---cancelBondProcess--");
+            this.cancelBond = true;
+        }
     }
 }
