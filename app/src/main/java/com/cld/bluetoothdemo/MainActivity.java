@@ -15,6 +15,7 @@ import android.widget.Button;
 import android.widget.ListView;
 import com.cld.bluetooth.BluetoothDelegateAdapter;
 import com.cld.bluetooth.BluetoothDelegateAdapter.BTEventListener;
+import com.cld.bluetooth.CldBluetoothDevice;
 import com.cld.bluetoothdemo.DemoManager.BluetoothAdapterListener;
 import java.util.ArrayList;
 
@@ -30,7 +31,7 @@ public class MainActivity extends Activity implements OnClickListener, BTEventLi
     private BluetoothDelegateAdapter mDelegateAdapter;
     private ArrayAdapter mAdapter;
     private ArrayList<String> arrayAdapter = new ArrayList<>();
-    private ArrayList<BluetoothDevice> deviceList = new ArrayList<>();
+    private ArrayList<CldBluetoothDevice> deviceList = new ArrayList<>();
     private boolean isDiscoveryFinished = false;
     private DemoManager manager;
 
@@ -115,25 +116,25 @@ public class MainActivity extends Activity implements OnClickListener, BTEventLi
     }
 
     @Override
-    public void onDeviceFound(BluetoothDevice device) {
-        arrayAdapter.add(device.getName() + "\n" + device.getAddress());
+    public void onDeviceFound(CldBluetoothDevice device) {
+        arrayAdapter.add(device.getDeviceName() + "\n" + device.getDeviceAddress());
         deviceList.add(device);
         mAdapter.notifyDataSetChanged();
-        Log.i(TAG, "---tj---onDeviceFound---" + device.getName() + "----" + device.getAddress());
+        Log.i(TAG, "---tj---onDeviceFound---" + device.getDeviceName() + "----" + device.getDeviceAddress());
     }
 
     @Override
-    public void onDeviceConnected(BluetoothDevice device) {
-
-    }
-
-    @Override
-    public void onDeviceConnectFailed(BluetoothDevice device) {
+    public void onDeviceConnected(CldBluetoothDevice device) {
 
     }
 
     @Override
-    public void onDeviceDisconnected(BluetoothDevice device) {
+    public void onDeviceConnectFailed(CldBluetoothDevice device) {
+
+    }
+
+    @Override
+    public void onDeviceDisconnected(CldBluetoothDevice device) {
 
     }
 
