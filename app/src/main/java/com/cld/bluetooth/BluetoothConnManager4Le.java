@@ -10,10 +10,13 @@ import android.bluetooth.BluetoothGattService;
 import android.bluetooth.BluetoothManager;
 import android.bluetooth.BluetoothProfile;
 import android.content.Context;
+import android.os.Build;
 import android.os.Message;
 import android.util.Log;
 import android.os.Handler;
 
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -30,7 +33,8 @@ public class BluetoothConnManager4Le {
     private Context mContext;
     private Handler mHandler;
     private BluetoothManager mBluetoothmanager;
-    private ArrayList<DataReceiver> mDataReceivers = new ArrayList<>();
+    private ArrayList<DataReceiver> mDataReceivers;
+    private BluetoothConnManager4Le.ConnectionList mList;
     private int mMtu = 20;
     private int credit = 0;
 
@@ -38,33 +42,13 @@ public class BluetoothConnManager4Le {
         this.mContext = context;
         this.mHandler = handler;
         this.mBluetoothmanager = (BluetoothManager)context.getSystemService(Context.BLUETOOTH_SERVICE);
-    }
-
-    public void connect(BluetoothDevice device){
-        if(device != null) {
-            new GattConnection(this.mContext, device, this.mHandler, this.mDataReceivers);
-        }
-    }
-
-    public void disconnect(BluetoothDevice device){
-
-    }
-
-    public void disconnectAll(){
-
-    }
-
-    public void close(){
-
-    }
-
-    public void write(BluetoothDevice device, byte[] buf, int length){
-
+        this.mList = new BluetoothConnManager4Le.ConnectionList();
+        this.mList.clear();
     }
 
     public void registerDataReceiver(DataReceiver receiver){
         if(mDataReceivers == null){
-            return;
+            this.mDataReceivers = new ArrayList();
         }
         if(!mDataReceivers.contains(receiver)){
             mDataReceivers.add(receiver);
@@ -75,6 +59,58 @@ public class BluetoothConnManager4Le {
         if(mDataReceivers != null){
             mDataReceivers.remove(receiver);
         }
+    }
+
+    public void connect(CldBluetoothDevice device){
+        if(device != null && !device.isConnected()) {
+            device.setBondStatus(CldBluetoothDevice.BondStatus.STATE_BONDED);
+            device.setConnectStatus(CldBluetoothDevice.ConnectStatus.STATUS_CONNECTTING);
+            new GattConnection(this.mContext, device, this.mHandler, this.mDataReceivers);
+        }else{
+            Log.e(TAG, "----tj----device is connected or is null----");
+        }
+    }
+
+    public void disconnect(CldBluetoothDevice device){
+        BluetoothConnManager4Le.GattConnection found = this.mList.foundDevice(device);
+        if(found != null){
+            found.disconnect();
+        }
+    }
+
+    public void disconnectAll(){
+        this.mList.releaseAllConnections();
+    }
+
+    public void destory() {
+        this.mList.releaseAllConnections();
+        this.mHandler = null;
+        this.mDataReceivers = null;
+    }
+
+    public void write(CldBluetoothDevice device, byte[] buf, int length){
+        this.mList.write(device, buf, length);
+    }
+
+    public List<CldBluetoothDevice> getCurrentConnectedDevice() {
+        return this.mList.getCurrentConnectedDevice();
+    }
+
+    public void setTargetUUIDs(CldBluetoothDevice device, String serviceUUID, String notifyCharacteristicUUID, String writeCharacteristicUUID) {
+        BluetoothConnManager4Le.GattConnection found = this.mList.foundDevice(device);
+        if(found != null) {
+            found.setTargetUUIDs(serviceUUID, notifyCharacteristicUUID, writeCharacteristicUUID);
+        }
+
+    }
+
+    public void setMtu(CldBluetoothDevice device, int mtu) {
+        BluetoothConnManager4Le.GattConnection found = this.mList.foundDevice(device);
+        if(found != null) {
+            this.mMtu = mtu;
+            found.setMtu(mtu);
+        }
+
     }
 
     class GattConnection{
@@ -92,7 +128,7 @@ public class BluetoothConnManager4Le {
         private int length;
         private Context mContext;
         private Handler mHandler;
-        private BluetoothDevice device;
+        private CldBluetoothDevice device;
         private BluetoothGatt mBluetoothGatt;
         private BluetoothAdapter mBluetoothAdapter;
         private ArrayList<DataReceiver> mDataReceivers;
@@ -100,18 +136,31 @@ public class BluetoothConnManager4Le {
         private BluetoothGattCallback mBluetoothGattCallback = new BluetoothGattCallback() {
             @Override
             public void onConnectionStateChange(BluetoothGatt gatt, int status, int newState) {
+                Message msg;
                 if(gatt == GattConnection.this.mBluetoothGatt && newState == BluetoothProfile.STATE_CONNECTED){
-                    Message msg = GattConnection.this.mHandler.obtainMessage(MSG_CONNECTED);
-                    msg.obj = GattConnection.this.device;
-                    GattConnection.this.mHandler.sendMessage(msg);
-                    Log.i(TAG, "-------Connected to GATT server----");
-                    Log.i(TAG, "-------Attempting to start service discovery----" +
-                            mBluetoothGatt.discoverServices());
+                    BluetoothConnManager4Le.this.mList.addConnection(GattConnection.this.mGattConnection);
+                    GattConnection.this.discoveryServices();
+                    if(GattConnection.this.mHandler != null) {
+                        msg = GattConnection.this.mHandler.obtainMessage(MSG_CONNECTED);
+                        msg.obj = GattConnection.this.device;
+                        GattConnection.this.device.connected(true);
+                        GattConnection.this.device.setConnectStatus(CldBluetoothDevice.ConnectStatus.STATUS_CONNECTED);
+                        GattConnection.this.mHandler.sendMessage(msg);
+                    }
                 }else if(gatt == GattConnection.this.mBluetoothGatt && newState == BluetoothProfile.STATE_DISCONNECTED){
-                    Log.i(TAG, "------Disconnected from GATT server-------");
-                    Message msg = GattConnection.this.mHandler.obtainMessage(MSG_DISCONNECTED);
-                    msg.obj = GattConnection.this.device;
-                    GattConnection.this.mHandler.sendMessage(msg);
+                    Log.i(TAG, "BluetoothGattCallback STATE_DISCONNECTED");
+                    BluetoothConnManager4Le.this.credit = 0;
+                    GattConnection.this.mWriteCharacteristic = null;
+                    GattConnection.this.mNotifyCharacteristic = null;
+                    GattConnection.this.mMTUCharacteristic = null;
+                    if(GattConnection.this.mHandler != null) {
+                        msg = GattConnection.this.mHandler.obtainMessage(MSG_DISCONNECTED);
+                        msg.obj = GattConnection.this.device;
+                        GattConnection.this.device.connected(false);
+                        GattConnection.this.device.setConnectStatus(CldBluetoothDevice.ConnectStatus.STATUS_DISCONNECTED);
+                        GattConnection.this.mHandler.sendMessage(msg);
+                    }
+
                     GattConnection.this.close();
                 }
             }
@@ -132,9 +181,9 @@ public class BluetoothConnManager4Le {
 
             @Override
             public void onCharacteristicWrite(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic, int status) {
-//                if(gatt == GattConnection.this.mBluetoothGatt && status == BluetoothGatt.GATT_SUCCESS){
-//                    GattConnection.this.onDataChanged(characteristic);
-//                }
+                if(gatt == GattConnection.this.mBluetoothGatt && status == BluetoothGatt.GATT_SUCCESS){
+                    GattConnection.this.onDataChanged(characteristic);
+                }
             }
 
             @Override
@@ -151,32 +200,52 @@ public class BluetoothConnManager4Le {
 
             @Override
             public void onDescriptorWrite(BluetoothGatt gatt, BluetoothGattDescriptor descriptor, int status) {
-                super.onDescriptorWrite(gatt, descriptor, status);
+                if(GattConnection.this.mNotifyCharacteristicUUID.equals(descriptor.getCharacteristic().getUuid().toString()) && GattConnection.this.mMTUCharacteristic != null) {
+                    GattConnection.this.setCharacteristicNotification(GattConnection.this.mMTUCharacteristic, true);
+                }
             }
 
             @Override
             public void onMtuChanged(BluetoothGatt gatt, int mtu, int status) {
                 if(gatt == GattConnection.this.mBluetoothGatt && status == BluetoothGatt.GATT_SUCCESS){
-
+                    BluetoothConnManager4Le.this.mMtu = mtu;
+                }else{
+                    Log.i(TAG, "request mtu fail");
+                    BluetoothConnManager4Le.this.mMtu = 20;
                 }
             }
         };
 
 
-        public GattConnection(Context context, BluetoothDevice dev, Handler handler, ArrayList<DataReceiver> dataReceivers){
-            this.mContext = context;
+        public GattConnection(Context context, CldBluetoothDevice mDevice, Handler handler, ArrayList<DataReceiver> dataReceivers){
             this.mHandler = handler;
-            this.device = dev;
             this.mDataReceivers = dataReceivers;
+            this.mBluetoothAdapter = BluetoothConnManager4Le.this.mBluetoothmanager.getAdapter();
+            this.device = mDevice;
+            BluetoothDevice dev = this.mBluetoothAdapter.getRemoteDevice(this.device.getDeviceAddress());
+            if(Build.VERSION.SDK_INT < 21) {
+                this.mBluetoothGatt = dev.connectGatt(context, false, this.mBluetoothGattCallback);
+            } else {
+                Class cls = BluetoothDevice.class;
+                Method m = null;
 
-            if(BluetoothConnManager4Le.this.mBluetoothmanager != null) {
-                this.mBluetoothAdapter = BluetoothConnManager4Le.this.mBluetoothmanager.getAdapter();
+                try {
+                    m = cls.getMethod("connectGatt", new Class[]{Context.class, Boolean.TYPE, BluetoothGattCallback.class, Integer.TYPE});
+                    if(m != null) {
+                        try {
+                            this.mBluetoothGatt = (BluetoothGatt)m.invoke(dev, new Object[]{context, Boolean.valueOf(false), this.mBluetoothGattCallback, Integer.valueOf(2)});
+                        } catch (IllegalArgumentException e) {
+                            e.printStackTrace();
+                        } catch (IllegalAccessException e) {
+                            e.printStackTrace();
+                        } catch (InvocationTargetException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                } catch (NoSuchMethodException e) {
+                    e.printStackTrace();
+                }
             }
-            if(connect(dev)){
-                Log.i(TAG, "------GattDevice connect success----");
-            }
-
-
         }
 
         public void setTargetUUIDs(String serviceUUID, String notifyCharacteristicUUID, String writeCharacteristicUUID) {
@@ -187,17 +256,17 @@ public class BluetoothConnManager4Le {
                 this.mMTUCharacteristicUUID = "0000ff03-0000-1000-8000-00805f9b34fb";
             }
 
-            Iterator i$ = this.getSupportedGattServices().iterator();
+            Iterator iterator = this.getSupportedGattServices().iterator();
 
-            while(i$.hasNext()) {
-                BluetoothGattService gattService = (BluetoothGattService)i$.next();
+            while(iterator.hasNext()) {
+                BluetoothGattService gattService = (BluetoothGattService)iterator.next();
                 String serviceUUIDString = gattService.getUuid().toString();
                 if(serviceUUIDString != null && serviceUUIDString.equals(this.mGattServiceUUID)) {
                     List gattCharacteristics = gattService.getCharacteristics();
-                    Iterator i$1 = gattCharacteristics.iterator();
+                    Iterator iterator1 = gattCharacteristics.iterator();
 
-                    while(i$1.hasNext()) {
-                        BluetoothGattCharacteristic gattCharacteristic = (BluetoothGattCharacteristic)i$1.next();
+                    while(iterator1.hasNext()) {
+                        BluetoothGattCharacteristic gattCharacteristic = (BluetoothGattCharacteristic)iterator1.next();
                         String characteristicUUIDString = gattCharacteristic.getUuid().toString();
                         if(characteristicUUIDString.equals(this.mWriteCharacteristicUUID)) {
                             this.mWriteCharacteristic = gattCharacteristic;
@@ -225,6 +294,27 @@ public class BluetoothConnManager4Le {
                 this.mBluetoothGatt.requestMtu(mtu);
             }
 
+        }
+
+        public void discoveryServices() {
+            if(this.mBluetoothGatt != null) {
+                this.mBluetoothGatt.discoverServices();
+            }
+
+        }
+
+        public void close() {
+            if(this.mBluetoothGatt != null) {
+                this.mBluetoothGatt.close();
+                this.mBluetoothGatt = null;
+            }
+
+        }
+
+        public void disconnect(){
+            if(mBluetoothGatt != null){
+                mBluetoothGatt.disconnect();
+            }
         }
 
         public void write(byte[] buf, int length) {
@@ -258,7 +348,30 @@ public class BluetoothConnManager4Le {
 
         }
 
-        public void writeCharacteristic(BluetoothGattCharacteristic characteristic) {
+        void setCharacteristicNotification(BluetoothGattCharacteristic characteristic, boolean enabled) {
+            if(this.mBluetoothGatt != null) {
+                this.mBluetoothGatt.setCharacteristicNotification(characteristic, enabled);
+                if(this.mNotifyCharacteristicUUID.equals(characteristic.getUuid().toString()) || this.mMTUCharacteristicUUID.equals(characteristic.getUuid().toString())) {
+                    characteristic.setWriteType(2);
+                    BluetoothGattDescriptor descriptor = characteristic.getDescriptor(UUID.fromString("00002902-0000-1000-8000-00805f9b34fb"));
+                    if(descriptor != null) {
+                        descriptor.setValue(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE);
+                    }
+
+                    this.mBluetoothGatt.writeDescriptor(descriptor);
+                }
+            }
+
+        }
+
+        void readCharacteristic(BluetoothGattCharacteristic characteristic) {
+            if(this.mBluetoothGatt != null) {
+                this.mBluetoothGatt.readCharacteristic(characteristic);
+            }
+
+        }
+
+        void writeCharacteristic(BluetoothGattCharacteristic characteristic) {
             boolean flag = false;
             if(this.mBluetoothGatt != null) {
                 this.mBluetoothGatt.writeCharacteristic(characteristic);
@@ -266,99 +379,13 @@ public class BluetoothConnManager4Le {
 
         }
 
-        private boolean connect(BluetoothDevice device){
-            // Previously connected device.  Try to reconnect.
-            if (mBluetoothGatt != null) {
-                Log.d(TAG, "Trying to use an existing mBluetoothGatt for connection.");
-                if (mBluetoothGatt.connect()) {
-                    return true;
-                } else {
-                    return false;
-                }
-            }
-
-            if (device == null) {
-                Log.w(TAG, "Device not found.  Unable to connect.");
-                return false;
-            }
-            // We want to directly connect to the device, so we are setting the autoConnect
-            // parameter to false.
-            mBluetoothGatt = device.connectGatt(this.mContext, false, this.mBluetoothGattCallback);
-            Log.d(TAG, "Trying to create a new connection.");
-            return true;
-        }
-
-        public void disconnect(){
-            if(mBluetoothGatt != null){
-                mBluetoothGatt.disconnect();
-            }
-        }
-
-        public void close(){
-            if(mBluetoothGatt != null){
-                mBluetoothGatt.close();
-                mBluetoothGatt = null;
-            }
-        }
-
-        public void discoverServices(){
-            if(mBluetoothGatt != null){
-                mBluetoothGatt.discoverServices();
-            }
-        }
-
-        /**
-         * Retrieves a list of supported GATT services on the connected device. This should be
-         * invoked only after {@code BluetoothGatt#discoverServices()} completes successfully.
-         *
-         * @return A {@code List} of supported services.
-         */
-        public List<BluetoothGattService> getSupportedGattServices() {
-            if (mBluetoothGatt == null) return null;
-
-            return mBluetoothGatt.getServices();
-        }
-
-        /**
-         * Request a read on a given {@code BluetoothGattCharacteristic}. The read result is reported
-         * asynchronously through the {@code BluetoothGattCallback#onCharacteristicRead(android.bluetooth.BluetoothGatt, android.bluetooth.BluetoothGattCharacteristic, int)}
-         * callback.
-         *
-         * @param characteristic The characteristic to read from.
-         */
-        public void readCharacteristic(BluetoothGattCharacteristic characteristic) {
-            if (mBluetoothAdapter == null || mBluetoothGatt == null) {
-                Log.w(TAG, "BluetoothAdapter not initialized");
-                return;
-            }
-            mBluetoothGatt.readCharacteristic(characteristic);
-        }
-
-        /**
-         * Enables or disables notification on a give characteristic.
-         *
-         * @param characteristic Characteristic to act on.
-         * @param enabled If true, enable notification.  False otherwise.
-         */
-        public void setCharacteristicNotification(BluetoothGattCharacteristic characteristic,
-                                                  boolean enabled) {
-            if (mBluetoothAdapter == null || mBluetoothGatt == null) {
-                Log.w(TAG, "BluetoothAdapter not initialized");
-                return;
-            }
-            mBluetoothGatt.setCharacteristicNotification(characteristic, enabled);
-
-            /* This is specific to Heart Rate Measurement.
-            if (UUID_HEART_RATE_MEASUREMENT.equals(characteristic.getUuid())) {
-                BluetoothGattDescriptor descriptor = characteristic.getDescriptor(
-                        UUID.fromString(SampleGattAttributes.CLIENT_CHARACTERISTIC_CONFIG));
-                descriptor.setValue(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE);
-                mBluetoothGatt.writeDescriptor(descriptor);
-            }*/
+        List<BluetoothGattService> getSupportedGattServices() {
+            return this.mBluetoothGatt == null?null:this.mBluetoothGatt.getServices();
         }
 
         void onServicesFound(List<BluetoothGattService> gattServices) {
             Message msg = this.mHandler.obtainMessage(MSG_LE_SERVICES_DISCOVERED);
+            this.device.setGattServices(gattServices);
             msg.obj = this.device;
             this.mHandler.sendMessage(msg);
             Iterator iterator = gattServices.iterator();
@@ -368,10 +395,10 @@ public class BluetoothConnManager4Le {
                 String serviceUUIDString = gattService.getUuid().toString();
                 if(serviceUUIDString != null && serviceUUIDString.equals(this.mGattServiceUUID)) {
                     List gattCharacteristics = gattService.getCharacteristics();
-                    Iterator iterator1 = gattCharacteristics.iterator();
+                    Iterator i$1 = gattCharacteristics.iterator();
 
-                    while(iterator1.hasNext()) {
-                        BluetoothGattCharacteristic gattCharacteristic = (BluetoothGattCharacteristic)iterator1.next();
+                    while(i$1.hasNext()) {
+                        BluetoothGattCharacteristic gattCharacteristic = (BluetoothGattCharacteristic)i$1.next();
                         String characteristicUUIDString = gattCharacteristic.getUuid().toString();
                         if(characteristicUUIDString.equals(this.mWriteCharacteristicUUID)) {
                             this.mWriteCharacteristic = gattCharacteristic;
@@ -396,18 +423,20 @@ public class BluetoothConnManager4Le {
 
         void onDataChanged(BluetoothGattCharacteristic characteristic) {
             byte[] data;
-            int i;
+            int num;
             if(this.mNotifyCharacteristicUUID.equals(characteristic.getUuid().toString())) {
                 data = characteristic.getValue();
                 if(data != null && data.length > 0) {
-                    this.buffer = data;
-                    this.length = data.length;
+                    this.device.buffer = data;
+                    this.device.length = data.length;
                     if(this.mDataReceivers != null) {
-                        Iterator iterator = mDataReceivers.iterator();
-                        while (iterator.hasNext()){
-                            DataReceiver receiver = (DataReceiver)iterator.next();
-                            if(receiver != null){
-                                receiver.onDataReceive(this.device, this.buffer, this.length);
+                        ArrayList d = (ArrayList)this.mDataReceivers.clone();
+                        num = d.size();
+
+                        for(int n = 0; n < num; ++n) {
+                            DataReceiver er = (DataReceiver)d.get(n);
+                            if(this.device.isValidDevice()) {
+                                er.onDataReceive(this.device, this.device.buffer, this.device.length);
                             }
                         }
                     }
@@ -416,17 +445,28 @@ public class BluetoothConnManager4Le {
 
             if(this.mMTUCharacteristicUUID.equals(characteristic.getUuid().toString())) {
                 data = characteristic.getValue();
-                byte tmp = data[0];
-                if(tmp == 1) {
+                byte b = data[0];
+                if(b == 1) {
                     BluetoothConnManager4Le.this.credit = data[1];
-                } else if(tmp == 2) {
-                    i = data[1] + (data[2] << 8);
+                } else if(b == 2) {
+                    num = data[1] + (data[2] << 8);
                 }
             }
 
         }
 
-        public BluetoothDevice getDevice() {
+        public boolean equals(Object o) {
+            if(o == null) {
+                return false;
+            } else if(!(o instanceof GattConnection)) {
+                return false;
+            } else {
+                GattConnection conn = (GattConnection)o;
+                return conn.device.equals(this.device);
+            }
+        }
+
+        public CldBluetoothDevice getDevice() {
             return this.device;
         }
 
@@ -442,59 +482,51 @@ public class BluetoothConnManager4Le {
             this.LOCK = new byte[0];
         }
 
-        public void write(BluetoothDevice device, byte[] buffer, int length) {
+        public void write(CldBluetoothDevice device, byte[] buffer, int length) {
             if(null != device && null != buffer && length > 0) {
                 GattConnection found = this.foundDevice(device);
                 if(null != found) {
                     found.write(buffer, length);
                 }
-
             }
         }
 
         public void addConnection(GattConnection connection) {
             GattConnection found = this.foundDevice(connection.getDevice());
-            byte[] var3;
             if(found != null) {
-                var3 = this.LOCK;
                 synchronized(this.LOCK) {
                     this.mConnectedDevices.remove(found);
                 }
             }
-
-            var3 = this.LOCK;
             synchronized(this.LOCK) {
                 this.mConnectedDevices.add(connection);
             }
         }
 
-        private GattConnection foundDevice(BluetoothDevice device) {
+        private GattConnection foundDevice(CldBluetoothDevice device) {
             GattConnection found = null;
-            byte[] var3 = this.LOCK;
             synchronized(this.LOCK) {
-                Iterator i$ = this.mConnectedDevices.iterator();
+                Iterator iterator = this.mConnectedDevices.iterator();
 
-                while(i$.hasNext()) {
-                    GattConnection ds = (GattConnection)i$.next();
+                while(iterator.hasNext()) {
+                    GattConnection ds = (GattConnection)iterator.next();
                     if(device.equals(ds.getDevice())) {
                         found = ds;
                         break;
                     }
                 }
-
                 return found;
             }
         }
 
-        public List<BluetoothDevice> getCurrentConnectedDevice() {
+        public List<CldBluetoothDevice> getCurrentConnectedDevice() {
             ArrayList devicesList = new ArrayList();
-            byte[] var2 = this.LOCK;
             synchronized(this.LOCK) {
-                Iterator i$ = this.mConnectedDevices.iterator();
+                Iterator iterator = this.mConnectedDevices.iterator();
 
-                while(i$.hasNext()) {
-                    GattConnection ds = (GattConnection)i$.next();
-                    BluetoothDevice device = ds.getDevice();
+                while(iterator.hasNext()) {
+                    GattConnection ds = (GattConnection)iterator.next();
+                    CldBluetoothDevice device = ds.getDevice();
                     if(device != null && !devicesList.contains(device)) {
                         devicesList.add(device);
                     }
@@ -505,23 +537,21 @@ public class BluetoothConnManager4Le {
         }
 
         public void clear() {
-            byte[] var1 = this.LOCK;
             synchronized(this.LOCK) {
                 this.mConnectedDevices.clear();
             }
         }
 
         public void releaseAllConnections() {
-            byte[] var1 = this.LOCK;
             synchronized(this.LOCK) {
-                Iterator i$ = this.mConnectedDevices.iterator();
+                Iterator iterator = this.mConnectedDevices.iterator();
 
                 while(true) {
-                    if(!i$.hasNext()) {
+                    if(!iterator.hasNext()) {
                         break;
                     }
 
-                    GattConnection ds = (GattConnection)i$.next();
+                    GattConnection ds = (GattConnection)iterator.next();
                     if(ds != null) {
                         ds.close();
                     }

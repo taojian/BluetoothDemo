@@ -15,6 +15,7 @@ import android.util.Log;
 
 import com.cld.bluetooth.BluetoothDelegateAdapter;
 import com.cld.bluetooth.BluetoothDelegateAdapter.BTEventListener;
+import com.cld.bluetooth.CldBluetoothDevice;
 
 public class TestService extends Service implements BTEventListener {
 	private final String TAG = "CLDLOGTAG";
@@ -80,7 +81,7 @@ public class TestService extends Service implements BTEventListener {
 	}
 
 	@Override
-	public void onDeviceConnected(BluetoothDevice device) {
+	public void onDeviceConnected(CldBluetoothDevice device) {
 //		ComponentName comp = new ComponentName(getPackageName(),
 //				MainActivity.class.getName());
 //		Intent intent = new Intent(Intent.ACTION_MAIN);
@@ -93,19 +94,29 @@ public class TestService extends Service implements BTEventListener {
 	}
 
 	@Override
-	public void onDeviceConnectFailed(BluetoothDevice device) {
+	public void onDeviceConnectFailed(CldBluetoothDevice device) {
 
 	}
 
 	@Override
-	public void onDeviceDisconnected(BluetoothDevice device) {
+	public void onDeviceDisconnected(CldBluetoothDevice device) {
 		stopForeground(true);
 		NotificationManager nm =(NotificationManager)getSystemService(NOTIFICATION_SERVICE);
 		nm.cancel(0x37512433);
 	}
 
 	@Override
-	public void onDeviceFound(BluetoothDevice device) {
+	public void onWriteFailed(CldBluetoothDevice var1, String var2) {
+
+	}
+
+	@Override
+	public void onLeServiceDiscovered(CldBluetoothDevice var1, String var2) {
+
+	}
+
+	@Override
+	public void onDeviceFound(CldBluetoothDevice device) {
 	}
 
 	@Override

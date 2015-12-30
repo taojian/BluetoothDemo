@@ -7,6 +7,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.SharedPreferences;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Message;
@@ -17,6 +18,8 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.List;
+
 import android.os.Handler;
 
 /**
@@ -30,11 +33,16 @@ public class BluetoothDelegateAdapter {
     private BluetoothAdapter mAdapter = null;
     private BroadcastReceiver deviceReceiver = null;
     private BluetoothConnManager connManager;
+    private BluetoothConnManager4Le connManager4Le;
     private Context mContext = null;
     private ArrayList<BTEventListener> mEventListeners = new ArrayList<>();
     private boolean isEnabled = false;
+    private boolean isAutoWritePincode = false;
     private MyHandler mHandler;
     private BluetoothAdapter.LeScanCallback mLeScanCallback = null;
+    private boolean mDiscoveryOnlyBonded;
+    private static BluetoothDelegateAdapter deleteAdapter;
+    private static final String VERSION_CODE = "cld_bluetooth_1.0";
 
     public static final int MSG_DEVICE_FOUND       = 1;
     public static final int MSG_DISCOVERY_FINISHED = 2;
@@ -56,6 +64,10 @@ public class BluetoothDelegateAdapter {
             connManager.start();
         }
 
+        if(isLeSupported()){
+            this.connManager4Le = new BluetoothConnManager4Le(context, this.mHandler);
+        }
+
         IntentFilter filter = new IntentFilter();
         filter.addAction(BluetoothDevice.ACTION_FOUND);
         filter.addAction(BluetoothDevice.ACTION_BOND_STATE_CHANGED);
@@ -63,6 +75,11 @@ public class BluetoothDelegateAdapter {
         filter.addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED);
         filter.addAction(BluetoothAdapter.ACTION_STATE_CHANGED);
         this.mContext.registerReceiver(this.deviceReceiver, filter);
+        if(deleteAdapter != null){
+            deleteAdapter.clean();
+
+        }
+        deleteAdapter = this;
     }
     public boolean isEnabled(){
         if(mAdapter != null){
@@ -87,17 +104,33 @@ public class BluetoothDelegateAdapter {
         }
     }
 
-    public void startDiscovery(){
+    public boolean startDiscovery(boolean onlyBonded){
         if(mAdapter == null){
-            return;
+            return false;
         }
+        boolean result = false;
         if(this.isEnabled()){
-            if(!mAdapter.isDiscovering()){
-                mAdapter.startDiscovery();
+            this.mDiscoveryOnlyBonded = onlyBonded;
+            if(mAdapter.isDiscovering()){
+                mAdapter.cancelDiscovery();
             }
+
+            if(onlyBonded){
+                Log.i(TAG, "---tj-----startDiscovery only bonded----");
+            }else{
+                Log.i(TAG, "----tj-----startDiscovery----");
+            }
+            mAdapter.startDiscovery();
+            result = true;
         }else{
             Log.i(TAG, "------tj----Bluetooth not enable----");
         }
+
+        return result;
+    }
+
+    public boolean startDiscovery() {
+        return this.startDiscovery(false);
     }
 
     public void stopDiscovery(){
@@ -105,21 +138,22 @@ public class BluetoothDelegateAdapter {
             return;
         }
         if(this.isEnabled()){
-            if(mAdapter.isDiscovering()){
-                mAdapter.cancelDiscovery();
-            }
+            mAdapter.cancelDiscovery();
         }else{
             Log.i(TAG, "------tj----Bluetooth not enable----");
         }
 
     }
 
-    public void startLeScan(int timeInSecond) {
+    public boolean startLeScan(int timeInSecond) {
+        boolean result = false;
         if(this.isEnabled() && isLeSupported()) {
             this.mLeScanCallback = new BluetoothAdapter.LeScanCallback() {
                 public void onLeScan(BluetoothDevice device, int rssi, byte[] scanRecord) {
+                    CldBluetoothDevice dev = CldBluetoothDeviceFactory.getDefaultFactory().createDevice(device, CldBluetoothDevice.DEVICE_TYPE_BLE);
+                    dev.setConnectionDirection(CldBluetoothDevice.Direction.DIRECTION_FORWARD);
                     Message msg = BluetoothDelegateAdapter.this.mHandler.obtainMessage(MSG_DEVICE_FOUND);
-                    msg.obj = device;
+                    msg.obj = dev;
                     BluetoothDelegateAdapter.this.mHandler.sendMessage(msg);
                 }
             };
@@ -129,8 +163,10 @@ public class BluetoothDelegateAdapter {
                 public void run() {
                     BluetoothDelegateAdapter.this.stopLeScan();
                 }
-            }, (long)(timeInSecond * 1000));
+            }, (long) (timeInSecond * 1000));
+            result = true;
         }
+        return result;
     }
 
     public void stopLeScan() {
@@ -141,6 +177,10 @@ public class BluetoothDelegateAdapter {
             }
         }
 
+    }
+
+    public static String getVersion(){
+        return VERSION_CODE;
     }
 
     public static boolean isLeSupported() {
@@ -170,37 +210,263 @@ public class BluetoothDelegateAdapter {
             return null;
     }
 
-    public boolean connectDevice(CldBluetoothDevice device){
-        boolean result = connectDevice(device, 10);
+    public boolean connectDevice(CldBluetoothDevice device) {
+        boolean result = this.connectDevice(device, 10);
+        if(!result) {
+            this.onEventReceived(MSG_CONNECT_FAILED, device, "parameter invalid");
+        }
+
         return result;
     }
 
-    public boolean connectDevice(CldBluetoothDevice device, int bondTime){
+    public boolean connectDevice(CldBluetoothDevice device, int bondTime) {
+        Log.i("BluetoothIBridgeAdapter", "connectDevice...");
+        Log.i("BluetoothIBridgeAdapter", "bondTime = " + bondTime);
         boolean result = false;
-        if(this.isEnabled()){
-            this.connManager.connect(device, bondTime);
-            result = true;
+        if(this.isEnabled()) {
+            if(device != null) {
+                Log.i("BluetoothIBridgeAdapter", "start to connect");
+                if(device.getDeviceType() == CldBluetoothDevice.DEVICE_TYPE_CLASSIC) {
+                    this.connManager.connect(device, bondTime);
+                    result = true;
+                } else if(device.getDeviceType() == CldBluetoothDevice.DEVICE_TYPE_BLE) {
+                    this.connManager4Le.connect(device);
+                    result = true;
+                }
+            } else {
+                Log.e("BluetoothIBridgeAdapter", "device is null");
+            }
+        } else {
+            Log.e("BluetoothIBridgeAdapter", "bluetooth is not enabled");
         }
+
+        Log.i("BluetoothIBridgeAdapter", "connectDevice.");
         return result;
+    }
+
+    public void cancelBondProcess() {
+        Log.i("BluetoothIBridgeAdapter", "cancelBondProcess...");
+        if(this.connManager != null) {
+            this.connManager.cancelBond();
+        }
+
+        Log.i("BluetoothIBridgeAdapter", "cancelBondProcess.");
     }
 
     public void disconnectDevice(CldBluetoothDevice device){
         if(this.isEnabled()){
-            this.connManager.disconnect(device);
+            if(device.getDeviceType() == CldBluetoothDevice.DEVICE_TYPE_CLASSIC){
+                this.connManager.disconnect(device);
+            }else if(device.getDeviceType() == CldBluetoothDevice.DEVICE_TYPE_BLE){
+                this.connManager4Le.disconnect(device);
+            }
         }
     }
 
     public void send(CldBluetoothDevice device, byte[] buffer, int length){
         if(this.isEnabled() && device != null){
-            this.connManager.write(device, buffer, length);
+            if(device.getDeviceType() == CldBluetoothDevice.DEVICE_TYPE_CLASSIC) {
+                this.connManager.write(device, buffer, length);
+            }else if(device.getDeviceType() == CldBluetoothDevice.DEVICE_TYPE_BLE){
+                this.connManager4Le.write(device, buffer, length);
+            }
         }
     }
 
-    public void destroy(){
-        if(connManager != null){
-            connManager.stop();
+    public List<CldBluetoothDevice> getCurrentConnectedDevice() {
+        Log.i("BluetoothIBridgeAdapter", "getCurrentConnectedDevice...");
+        List devicesList = this.connManager.getCurrentConnectedDevice();
+        List devicesList4Gatt = this.connManager4Le.getCurrentConnectedDevice();
+        ArrayList devicesListTotal = new ArrayList();
+        Iterator i$;
+        CldBluetoothDevice device;
+        if(devicesList != null) {
+            i$ = devicesList.iterator();
+
+            while(i$.hasNext()) {
+                device = (CldBluetoothDevice)i$.next();
+                devicesListTotal.add(device);
+            }
         }
-        this.mContext.unregisterReceiver(this.deviceReceiver);
+
+        if(devicesList4Gatt != null) {
+            i$ = devicesList4Gatt.iterator();
+
+            while(i$.hasNext()) {
+                device = (CldBluetoothDevice)i$.next();
+                devicesListTotal.add(device);
+            }
+        }
+
+        Log.i("BluetoothIBridgeAdapter", devicesListTotal.size() + " devices got");
+        Log.i("BluetoothIBridgeAdapter", "getCurrentConnectedDevice.");
+        return devicesList;
+    }
+
+    public CldBluetoothDevice getLastConnectedDevice() {
+        Log.i("BluetoothIBridgeAdapter", "getLastConnectedDevice...");
+        CldBluetoothDevice device = null;
+        SharedPreferences sp = this.mContext.getSharedPreferences("last_connected_device", 0);
+        if(sp != null) {
+            String deviceName = sp.getString("last_connected_device_name", "");
+            String deviceAddress = sp.getString("last_connected_device_address", "");
+            if(deviceAddress != null && deviceAddress != "" && deviceAddress != " ") {
+                device = CldBluetoothDevice.createCldBluetoothDevice(deviceAddress, CldBluetoothDevice.DEVICE_TYPE_CLASSIC);
+            }
+        }
+
+        if(device == null) {
+            Log.i("BluetoothIBridgeAdapter", "no device found");
+        } else {
+            Log.i("BluetoothIBridgeAdapter", "name:" + device.getDeviceName() + "/" + "address:" + device.getDeviceAddress());
+        }
+
+        Log.i("BluetoothIBridgeAdapter", "getLastConnectedDevice.");
+        return device;
+    }
+
+    public boolean setLastConnectedDevice(CldBluetoothDevice device) {
+        Log.i("BluetoothIBridgeAdapter", "setLastConnectedDevice...");
+        SharedPreferences sp = this.mContext.getSharedPreferences("last_connected_device", 0);
+        SharedPreferences.Editor editor = sp.edit();
+        editor.putString("last_connected_device_name", device.getDeviceName());
+        editor.putString("last_connected_device_address", device.getDeviceAddress());
+        boolean flag = editor.commit();
+        if(device == null) {
+            Log.i("BluetoothIBridgeAdapter", "device is null");
+        } else {
+            Log.i("BluetoothIBridgeAdapter", "name:" + device.getDeviceName() + "/" + "address:" + device.getDeviceAddress());
+        }
+
+        Log.i("BluetoothIBridgeAdapter", "setLastConnectedDevice.");
+        return flag;
+    }
+
+    public boolean clearLastConnectedDevice() {
+        Log.i("BluetoothIBridgeAdapter", "clearLastConnectedDevice...");
+        SharedPreferences sp = this.mContext.getSharedPreferences("last_connected_device", 0);
+        boolean flag = false;
+        if(sp != null) {
+            SharedPreferences.Editor editor = sp.edit();
+            editor.clear();
+            flag = editor.commit();
+        }
+
+        Log.i("BluetoothIBridgeAdapter", "clearLastConnectedDevice.");
+        return flag;
+    }
+
+    public String getLocalName() {
+        Log.i("BluetoothIBridgeAdapter", "getLocalName.");
+        Log.i("BluetoothIBridgeAdapter", "local name is " + this.mAdapter.getName());
+        return this.mAdapter.getName();
+    }
+
+    public boolean setLocalName(String name) {
+        Log.i("BluetoothIBridgeAdapter", "setLocalName to " + name);
+        return this.mAdapter.setName(name);
+    }
+
+    public void setLinkKeyNeedAuthenticated(boolean authenticated) {
+        Log.i("BluetoothIBridgeAdapter", "setLinkKeyNeedAuthenticated to " + authenticated);
+        if(this.connManager != null) {
+            this.connManager.setLinkKeyNeedAuthenticated(authenticated);
+        }
+
+    }
+
+    public void setAutoBondBeforConnect(boolean auto) {
+        Log.i("BluetoothIBridgeAdapter", "setAutoBondBeforConnect to " + auto);
+        if(this.connManager != null) {
+            this.connManager.setAutoBond(auto);
+        }
+
+    }
+
+    public void setPincode(String pincode) {
+        Log.i("BluetoothIBridgeAdapter", "setPincode to " + pincode);
+        this.connManager.setPincode(pincode);
+    }
+
+    public void setAutoWritePincode(boolean autoWrite) {
+        Log.i("BluetoothIBridgeAdapter", "setAutoWritePincode to " + autoWrite);
+        this.isAutoWritePincode = autoWrite;
+    }
+
+    public void setDisvoverable(boolean bDiscoverable) {
+        Log.i("BluetoothIBridgeAdapter", "setDisvoverable to " + bDiscoverable);
+        if(this.isEnabled()) {
+            int duration = bDiscoverable?120:1;
+            Intent discoverableIntent;
+            if(bDiscoverable) {
+                discoverableIntent = new Intent("android.bluetooth.adapter.action.REQUEST_DISCOVERABLE");
+                discoverableIntent.putExtra("android.bluetooth.adapter.extra.DISCOVERABLE_DURATION", duration);
+                this.mContext.startActivity(discoverableIntent);
+            } else {
+                discoverableIntent = new Intent("android.bluetooth.adapter.action.REQUEST_DISCOVERABLE");
+                discoverableIntent.putExtra("android.bluetooth.adapter.extra.DISCOVERABLE_DURATION", 1);
+                this.mContext.startActivity(discoverableIntent);
+            }
+        }
+
+    }
+
+
+    public void setTargetUUIDs(CldBluetoothDevice device, String serviceUUID, String notifyCharacteristicUUID, String writeCharacteristicUUID) {
+        if(isLeSupported()) {
+            this.connManager4Le.setTargetUUIDs(device, serviceUUID, notifyCharacteristicUUID, writeCharacteristicUUID);
+        }
+
+    }
+
+    public void setMtu(CldBluetoothDevice device, int mtu) {
+        if(isLeSupported() && Build.VERSION.SDK_INT >= 21) {
+            this.connManager4Le.setMtu(device, mtu);
+        }
+
+    }
+
+    private static String messageString(int message) {
+        switch(message) {
+            case 1:
+                return "MESSAGE_DEVICE_CONNECTED";
+            case 2:
+                return "MESSAGE_DEVICE_DISCONNECTED";
+            case 3:
+            default:
+                return "MESSAGE";
+            case 4:
+                return "MESSAGE_DEVICE_CONNECT_FAILED";
+        }
+    }
+
+    private void clean() {
+        if(this.connManager != null) {
+            this.connManager.stop();
+            this.connManager = null;
+        }
+
+        this.mContext = null;
+        deleteAdapter = null;
+    }
+
+    public void destroy() {
+        if(this.connManager4Le != null) {
+            this.connManager4Le.destory();
+            this.connManager4Le = null;
+        }
+
+        if(this.connManager != null) {
+            this.connManager.stop();
+            this.connManager = null;
+        }
+
+        if(this.mContext != null) {
+            this.mContext.unregisterReceiver(this.deviceReceiver);
+        }
+
+        this.mContext = null;
+        deleteAdapter = null;
     }
 
     protected void onEventReceived(int what, CldBluetoothDevice device, String message){
@@ -352,5 +618,9 @@ public class BluetoothDelegateAdapter {
         void onDeviceConnectFailed(CldBluetoothDevice device);
 
         void onDeviceDisconnected(CldBluetoothDevice device);
+
+        void onWriteFailed(CldBluetoothDevice var1, String var2);
+
+        void onLeServiceDiscovered(CldBluetoothDevice var1, String var2);
     }
 }

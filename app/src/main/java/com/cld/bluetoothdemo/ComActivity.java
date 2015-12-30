@@ -13,16 +13,21 @@ import android.view.View;
 import android.widget.Button;
 import android.view.View.OnClickListener;
 import android.widget.EditText;
+import android.widget.ScrollView;
 import android.widget.TextView;
 
 import com.cld.bluetooth.BluetoothDelegateAdapter;
 import com.cld.bluetooth.BluetoothDelegateAdapter.DataReceiver;
 import com.cld.bluetooth.CldBluetoothDevice;
 
+import java.io.UnsupportedEncodingException;
+
 
 public class ComActivity extends Activity implements OnClickListener, DataReceiver{
 
     private static final String TAG = "ComActivity";
+    private static int MAX_BYTE = 1024;
+    private static int MAX_LENGTH = 1024 * 10;
     private BluetoothDelegateAdapter mAdapter = DemoManager.getDelegateAdapter();
     private CldBluetoothDevice device;
     private Button btnCon;
@@ -31,7 +36,9 @@ public class ComActivity extends Activity implements OnClickListener, DataReceiv
     private Button btnClear;
     private EditText editData;
     private TextView tvDataShow;
+    private ScrollView scrollView;
     private MyHandler mHandler;
+    private String text = "";
 
 
     @Override
@@ -88,14 +95,26 @@ public class ComActivity extends Activity implements OnClickListener, DataReceiv
 
     @Override
     public void onDataReceive(CldBluetoothDevice device, byte[] data, int length) {
-        String receiveData = new String(data, 0, length);
-        tvDataShow.setText(receiveData);
+        String receiveData = null;
+        int num = 0;
+        if(length > data.length){
+            num = 1024;
+        }else{
+            num = length;
+        }
+        try {
+            receiveData = new String(data, 0, num, "utf-8");
+        } catch (UnsupportedEncodingException e) {
+            e.printStackTrace();
+        }
+        mHandler.obtainMessage(MyHandler.MSG_CLEAR).sendToTarget();
+        mHandler.obtainMessage(MyHandler.MSG_RECEIVED_STRING, receiveData).sendToTarget();
     }
 
     private class MyHandler extends Handler{
         public static final int MSG_RECEIVED_SPEED = 0x01;
         public static final int MSG_RECEIVED_STRING = 0x02;
-        public static final int MESSAGE_CLEAR = 0x03;
+        public static final int MSG_CLEAR = 0x03;
         public static final int MSG_AUTO_WRITE_STARTED = 0x04;
         public static final int MSG_AUTO_WRITE_SPEED = 0x05;
         public static final int MSG_AUTO_WRITE_COMPLETED = 0x06;
@@ -111,12 +130,32 @@ public class ComActivity extends Activity implements OnClickListener, DataReceiv
             super.handleMessage(msg);
             switch(msg.what){
                 case MSG_RECEIVED_STRING:
+
+                    break;
+                case MSG_CLEAR:
+
                     break;
                 case MSG_AUTO_CONNECT_STARTED:
                     break;
                 default:
                     break;
 
+            }
+        }
+
+        private void setResultText(String result, boolean append) {
+            if (append) {
+                if (text.length() < MAX_LENGTH) {
+                    text += result + "\n";
+                } else {
+                    text = "";
+                    text += result + "\n";
+                }
+                tvDataShow.setText(text);
+                scrollView.scrollTo(0, tvDataShow.getHeight());
+            } else {
+                text = result+ "\n";
+                tvDataShow.setText(result);
             }
         }
     }

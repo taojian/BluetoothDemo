@@ -139,6 +139,16 @@ public class MainActivity extends Activity implements OnClickListener, BTEventLi
     }
 
     @Override
+    public void onWriteFailed(CldBluetoothDevice var1, String var2) {
+
+    }
+
+    @Override
+    public void onLeServiceDiscovered(CldBluetoothDevice var1, String var2) {
+
+    }
+
+    @Override
     public void onBluetoothAdapterListenerCreated(BluetoothDelegateAdapter adapter) {
         this.mDelegateAdapter = adapter;
         this.mDelegateAdapter.registerEventListeners(this);

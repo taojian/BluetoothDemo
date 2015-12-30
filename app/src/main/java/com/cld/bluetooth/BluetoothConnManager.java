@@ -77,8 +77,23 @@ public class BluetoothConnManager implements ConnectionReceiver {
             this.mConnectThread.cancel();
             this.mConnectThread = null;
         }
-        this.mConnectThread = new ConnectThread(device, bondTime);
-        this.mConnectThread.start();
+        device.setBondStatus();
+        if(this.autoPair && device.getBondStatus().equals(BondStatus.STATE_BONDNONE)){
+            device.setBondStatus(BondStatus.STATE_BONDING);
+        }
+
+        if(device != null && !device.isConnected()){
+            device.setConnectStatus(ConnectStatus.STATUS_CONNECTTING);
+            this.mConnectThread = new ConnectThread(device, bondTime);
+            this.mConnectThread.start();
+        }
+    }
+
+    public synchronized void cancelBond() {
+        if(this.mConnectThread != null) {
+            this.mConnectThread.cancelBondProcess();
+        }
+
     }
 
     public synchronized void disconnect(CldBluetoothDevice device){
@@ -100,6 +115,9 @@ public class BluetoothConnManager implements ConnectionReceiver {
         bundle.putString("exception", exception);
         msg.setData(bundle);
         mHandler.sendMessage(msg);
+        synchronized (this){
+            this.mConnectThread = null;
+        }
 
     }
 
