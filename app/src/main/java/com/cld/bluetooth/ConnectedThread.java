@@ -80,6 +80,17 @@ public class ConnectedThread extends Thread{
         resetSocket(this.mSocket);
     }
 
+    public boolean equals(Object o) {
+        if(o == null) {
+            return false;
+        } else if(!(o instanceof ConnectedThread)) {
+            return false;
+        } else {
+            ConnectedThread conn = (ConnectedThread)o;
+            return conn.mDevice.equals(this.mDevice);
+        }
+    }
+
     public CldBluetoothDevice getDevice(){
         return this.mDevice;
     }
@@ -92,6 +103,8 @@ public class ConnectedThread extends Thread{
                 Log.i(TAG, "----tj------mmInStream.read-----");
                 //非阻塞操作
                 int bytes = this.mmInStream.read(buffer);
+                this.mDevice.buffer = buffer;
+                this.mDevice.length = bytes;
                 if(this.dataReceivers != null){
                     Iterator iterator = dataReceivers.iterator();
                     while(iterator.hasNext()){
@@ -114,6 +127,10 @@ public class ConnectedThread extends Thread{
             resetSocket(this.mSocket);
         }
 
+        if(this.mDevice != null){
+            this.mDevice.connected(false);
+            this.mDevice.setConnectStatus(CldBluetoothDevice.ConnectStatus.STATUS_DISCONNECTED);
+        }
         Message msg = this.mHandler.obtainMessage(BluetoothDelegateAdapter.MSG_DISCONNECTED);
         msg.obj = this.mDevice;
         Bundle bundle = new Bundle();

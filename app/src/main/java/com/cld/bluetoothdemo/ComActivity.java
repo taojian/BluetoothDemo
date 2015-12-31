@@ -28,7 +28,7 @@ public class ComActivity extends Activity implements OnClickListener, DataReceiv
     private static final String TAG = "ComActivity";
     private static int MAX_BYTE = 1024;
     private static int MAX_LENGTH = 1024 * 10;
-    private BluetoothDelegateAdapter mAdapter = DemoManager.getDelegateAdapter();
+    private BluetoothDelegateAdapter mAdapter = ServiceBinder.getDelegateAdapter();
     private CldBluetoothDevice device;
     private Button btnCon;
     private Button btnDiscon;
@@ -46,8 +46,8 @@ public class ComActivity extends Activity implements OnClickListener, DataReceiv
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_com);
         setUp(this);
-        Intent mainActivity = this.getIntent();
-        device = mainActivity.getParcelableExtra("DEVICE");
+        device = ServiceBinder.getCurrentDevice();
+        Log.i(TAG, "---tj---接收的地址---"+device.toString());
         mAdapter.registerDataReceivers(this);
         mHandler = new MyHandler();
     }

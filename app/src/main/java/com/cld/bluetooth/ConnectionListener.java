@@ -60,11 +60,11 @@ final class ConnectionListener {
             this.running = true;
 
             try {
-                if(VERSION.SDK_INT >= 10) {
-                    tmp = this.listenUsingInsecureRfcommWithServiceRecord(SERVICE_NAME, SDPUUID);
+                if(!ConnectionListener.this.mAuthenticated && VERSION.SDK_INT >= 10) {
+                    tmp = this.listenUsingInsecureRfcommWithServiceRecord(SERVICE_NAME, CldBluetoothDevice.SPPUUID);
                     Log.i(TAG, "insecure rfcomm " + tmp);
                 } else {
-                    tmp = ConnectionListener.this.mAdapter.listenUsingRfcommWithServiceRecord(SERVICE_NAME, SDPUUID);
+                    tmp = ConnectionListener.this.mAdapter.listenUsingRfcommWithServiceRecord(SERVICE_NAME, CldBluetoothDevice.SPPUUID);
                     Log.i(TAG, "secure rfcomm " + tmp);
                 }
             } catch (IOException e) {

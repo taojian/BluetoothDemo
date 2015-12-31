@@ -75,10 +75,10 @@ public class BluetoothDelegateAdapter {
         filter.addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED);
         filter.addAction(BluetoothAdapter.ACTION_STATE_CHANGED);
         this.mContext.registerReceiver(this.deviceReceiver, filter);
-        if(deleteAdapter != null){
-            deleteAdapter.clean();
-
-        }
+//        if(deleteAdapter != null){
+//            deleteAdapter.clean();
+//
+//        }
         deleteAdapter = this;
     }
     public boolean isEnabled(){

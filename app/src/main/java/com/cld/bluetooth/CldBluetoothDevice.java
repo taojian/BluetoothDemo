@@ -271,7 +271,7 @@ public class CldBluetoothDevice implements Parcelable {
         return socket;
     }
 
-    void connected(boolean connected) {
+    public void connected(boolean connected) {
         this.mIsConnected = connected;
     }
 

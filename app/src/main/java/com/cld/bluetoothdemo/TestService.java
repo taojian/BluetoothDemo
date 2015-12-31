@@ -82,14 +82,14 @@ public class TestService extends Service implements BTEventListener {
 
 	@Override
 	public void onDeviceConnected(CldBluetoothDevice device) {
-//		ComponentName comp = new ComponentName(getPackageName(),
-//				MainActivity.class.getName());
-//		Intent intent = new Intent(Intent.ACTION_MAIN);
-//		intent.addCategory(Intent.CATEGORY_LAUNCHER);
-//		intent.setComponent(comp);
-//		intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-//		intent.putExtra("com.ivt.bleSpp.device", device);
-//		startActivity(intent);
+		ComponentName comp = new ComponentName(getPackageName(),
+				MainActivity.class.getName());
+		Intent intent = new Intent(Intent.ACTION_MAIN);
+		intent.addCategory(Intent.CATEGORY_LAUNCHER);
+		intent.setComponent(comp);
+		intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+		intent.putExtra("com.cld.bleSpp.device", device);
+		startActivity(intent);
 		startForeground();
 	}
 

@@ -8,6 +8,7 @@ import android.os.IBinder;
 import android.util.Log;
 
 import com.cld.bluetooth.BluetoothDelegateAdapter;
+import com.cld.bluetooth.CldBluetoothDevice;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -15,16 +16,25 @@ import java.util.List;
 /**
  * Created by taojian on 2015/12/3.
  */
-public class DemoManager {
+public class ServiceBinder {
 
     private static String TAG = "CLDLOGTAG";
     private static Context mContext;
     private static boolean mIsBound;
     private static BluetoothDelegateAdapter mAdapter;
     private List<BluetoothAdapterListener> mAdapterList = new ArrayList<>();
+    private static CldBluetoothDevice currentDevice;
 
-    DemoManager(Context context){
+    ServiceBinder(Context context){
         this.mContext = context;
+    }
+
+    public static CldBluetoothDevice getCurrentDevice() {
+        return currentDevice;
+    }
+
+    public static void setCurrentDevice(CldBluetoothDevice currentDevice) {
+        ServiceBinder.currentDevice = currentDevice;
     }
 
     void doBindService() {
@@ -71,9 +81,7 @@ public class DemoManager {
 
     public void unregisterBluetoothAdapterListener(BluetoothAdapterListener listener){
         synchronized (mAdapterList){
-            if(!mAdapterList.contains(listener)) {
-                mAdapterList.remove(listener);
-            }
+            mAdapterList.remove(listener);
         }
     }
 

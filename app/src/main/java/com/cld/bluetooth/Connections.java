@@ -20,7 +20,7 @@ public class Connections {
     private String TAG = "CLDLOGTAG";
     private ConnectionsList mList;
     private Handler mHandler;
-    private ArrayList<DataReceiver> dataReceivers = new ArrayList<>();
+    private ArrayList<DataReceiver> dataReceivers;
 
     public Connections(Handler handler){
         this.mList = new ConnectionsList();
@@ -29,6 +29,10 @@ public class Connections {
     }
 
     public void registerDataReceiver(DataReceiver listener){
+        if(this.dataReceivers == null){
+            this.dataReceivers = new ArrayList();
+        }
+
         if(!dataReceivers.contains(listener)){
             dataReceivers.add(listener);
         }
@@ -47,6 +51,10 @@ public class Connections {
         if(this.mList != null){
             this.mList.addConnection(conn);
         }
+        if(device != null){
+            device.connected(true);
+            device.setConnectStatus(CldBluetoothDevice.ConnectStatus.STATUS_CONNECTED);
+        }
         Message msg = mHandler.obtainMessage(BluetoothDelegateAdapter.MSG_CONNECTED);
         msg.obj = device;
         mHandler.sendMessage(msg);
@@ -60,6 +68,9 @@ public class Connections {
         ConnectedThread mThread = this.mList.findConnection(device);
         this.mList.removeConnection(device);
         if(mThread != null){
+            if(device != null){
+                device.setConnectStatus(CldBluetoothDevice.ConnectStatus.STATUS_DISCONNECTTING);
+            }
             mThread.cancel();
         }
     }
@@ -78,15 +89,17 @@ public class Connections {
 
     private class ConnectionsList{
         private byte[] LOCK;
-        private ConnectedThread mThread;
         private ArrayList<ConnectedThread> connectedList;
 
         ConnectionsList(){
             this.connectedList = new ArrayList<>();
+            this.LOCK = new byte[0];
         }
         public void clear(){
             if(this.connectedList != null){
-                this.connectedList.clear();
+                synchronized (this.LOCK) {
+                    this.connectedList.clear();
+                }
             }
         }
 
@@ -102,11 +115,15 @@ public class Connections {
         public void addConnection(ConnectedThread conn){
             ConnectedThread found = findConnection(conn.getDevice());
             if(found != null){
-                connectedList.remove(found);
+                synchronized (this.LOCK){
+                    connectedList.remove(found);
+                }
             }
 
             if(connectedList != null){
-                connectedList.add(conn);
+                synchronized (this.LOCK){
+                    connectedList.add(conn);
+                }
             }
         }
 
@@ -119,7 +136,6 @@ public class Connections {
 
         public List<CldBluetoothDevice> getCurrentConnectedDevice() {
             ArrayList devicesList = new ArrayList();
-            byte[] var2 = this.LOCK;
             synchronized(this.LOCK) {
                 Iterator i$ = this.connectedList.iterator();
 
@@ -136,29 +152,33 @@ public class Connections {
         }
 
         public void releaseAllConnections(){
-            Iterator iterator = connectedList.iterator();
-            while(iterator.hasNext()){
-                ConnectedThread conn = (ConnectedThread)iterator.next();
-                if(conn != null){
-                    conn.cancel();
+            synchronized (this.LOCK) {
+                Iterator iterator = connectedList.iterator();
+                while (iterator.hasNext()) {
+                    ConnectedThread conn = (ConnectedThread) iterator.next();
+                    if (conn != null) {
+                        conn.cancel();
+                    }
                 }
+                connectedList.clear();
             }
-            connectedList.clear();
         }
 
         private ConnectedThread findConnection(CldBluetoothDevice device){
-            Iterator iterator = connectedList.iterator();
             ConnectedThread conn = null;
-            while(iterator.hasNext()){
-                ConnectedThread mThread = (ConnectedThread)iterator.next();
-                if(device != null && mThread != null){
-                    if(device.equals(mThread.getDevice())){
-                        conn = mThread;
-                        break;
+            synchronized (this.LOCK) {
+                Iterator iterator = connectedList.iterator();
+                while (iterator.hasNext()) {
+                    ConnectedThread mThread = (ConnectedThread) iterator.next();
+                    if (device != null && mThread != null) {
+                        if (device.equals(mThread.getDevice())) {
+                            conn = mThread;
+                            break;
+                        }
                     }
                 }
+                return conn;
             }
-            return conn;
         }
 
 
